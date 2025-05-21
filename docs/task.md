@@ -31,14 +31,13 @@
 | G-3 | Create project management endpoints (CRUD) | 🔵 |
 | G-4 | Build video upload endpoint with direct storage upload | 🔵 |
 | G-5 | Implement clip generation request endpoints | 🔵 |
-| G-6 | Create template management endpoints | 🔵 |
-| G-7 | Implement caption CRUD endpoints | 🔵 |
-| G-8 | Create B-roll management endpoints | 🔵 |
-| G-9 | Build file serving endpoints for processed videos | 🔵 |
-| G-10 | Implement job status monitoring endpoints | 🔵 |
-| G-11 | Add error handling and validation middleware | 🔵 |
-| G-12 | Implement logging and monitoring | 🔵 |
-| G-13 | Build API documentation with Swagger | 🔵 |
+| G-6 | Implement caption CRUD endpoints | 🔵 |
+<!-- | G-7 | Create B-roll management endpoints | 🔵 | -->
+| G-7 | Build file serving endpoints for processed videos | 🔵 |
+| G-8 | Implement job status monitoring endpoints | 🔵 |
+| G-9 | Add error handling and validation middleware | 🔵 |
+| G-10 | Implement logging and monitoring | 🔵 |
+| G-11 | Build API documentation with Swagger | 🔵 |
 
 ## Phase 3 – Video Processor (Go)
 | ID | Task | Status |
@@ -52,11 +51,11 @@
 | V-7 | Create caption overlay renderer | 🔵 |
 | V-8 | Implement aspect ratio adjustment service | 🔵 |
 | V-9 | Build template application service | 🔵 |
-| V-10 | Create B-roll insertion service | 🔵 |
-| V-11 | Implement final video composition engine | 🔵 |
-| V-12 | Add error handling and recovery mechanisms | 🔵 |
-| V-13 | Implement job status updates to database | 🔵 |
-| V-14 | Create cleanup service for temporary files | 🔵 |
+<!-- | V-10 | Create B-roll insertion service | 🔵 | -->
+| V-10 | Implement final video composition engine | 🔵 |
+| V-11 | Add error handling and recovery mechanisms | 🔵 |
+| V-12 | Implement job status updates to database | 🔵 |
+| V-13 | Create cleanup service for temporary files | 🔵 |
 
 ## Phase 4 – AI Service (Python)
 | ID | Task | Status |

@@ -53,7 +53,7 @@ func main() {
 	projectClips.Get("", handlers.ListClips)
 	projectClips.Post("", handlers.CreateClip)
 	projectClips.Get("/:clipId", handlers.GetClip)
-	projectClips.Put("/:clipId", handlers.UpdateClip)
+	projectClips.Patch("/:clipId", handlers.UpdateClip) // Changed from Put to Patch
 	projectClips.Delete("/:clipId", handlers.DeleteClip)
 
 	log.Println("Starting API Gateway on port 8080...")
