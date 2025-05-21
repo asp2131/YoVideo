@@ -26,18 +26,19 @@
 ## Phase 2 – API Gateway (Go)
 | ID | Task | Status |
 |----|------|-------|
-| G-1 | Set up Go API server with Fiber | 🔵 |
-| G-2 | Implement Supabase client for database operations | 🔵 |
-| G-3 | Create project management endpoints (CRUD) | 🔵 |
-| G-4 | Build video upload endpoint with direct storage upload | 🔵 |
-| G-5 | Implement clip generation request endpoints | 🔵 |
-| G-6 | Implement caption CRUD endpoints | 🔵 |
+| G-1 | Set up Go API server with Fiber | 🟢 |
+| G-2 | Implement Supabase client for database operations | 🟢 |
+| G-3 | Create project management endpoints (CRUD) | 🟢 |
+| G-3.1 | Create clip management endpoints (CRUD) | 🟢 |
+| G-4 | Build video upload endpoint with direct storage upload | 🟢 |
+| G-5 | Implement clip generation request endpoints | 🟢 |
+| G-6 | Implement caption CRUD endpoints | 🟢 |
 <!-- | G-7 | Create B-roll management endpoints | 🔵 | -->
-| G-7 | Build file serving endpoints for processed videos | 🔵 |
-| G-8 | Implement job status monitoring endpoints | 🔵 |
-| G-9 | Add error handling and validation middleware | 🔵 |
-| G-10 | Implement logging and monitoring | 🔵 |
-| G-11 | Build API documentation with Swagger | 🔵 |
+| G-7 | Build file serving endpoints for processed videos | 🟢 |
+| G-8 | Implement job status monitoring endpoints | 🟢 |
+| G-9 | Add error handling and validation middleware | 🟢 |
+| G-10 | Implement logging and monitoring | 🟢 |
+| G-11 | Build API documentation with Swagger | 🟡 |
 
 ## Phase 3 – Video Processor (Go)
 | ID | Task | Status |
@@ -64,7 +65,7 @@
 | A-2 | Implement Whisper for transcription | 🔵 |
 | A-3 | Create highlight detection service | 🔵 |
 | A-4 | Build virality score prediction | 🔵 |
-| A-5 | Implement B-roll suggestion service | 🔵 |
+<!-- | A-5 | Implement B-roll suggestion service | 🔵 | -->
 | A-6 | Create caption formatting optimization | 🔵 |
 | A-7 | Build gRPC interface for Go service communication | 🔵 |
 | A-8 | Implement batch processing for efficiency | 🔵 |

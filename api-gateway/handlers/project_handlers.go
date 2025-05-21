@@ -11,80 +11,131 @@ import (
 	"videothingy/api-gateway/models"
 )
 
-// CreateProject handles the creation of a new project.
+// CreateProjectRequest defines the expected request body for creating a project.
+// Name is required. Description and ThumbnailURL are optional.
+type CreateProjectRequest struct {
+	Name         string  `json:"name" validate:"required"`
+	Description  *string `json:"description,omitempty"`
+	ThumbnailURL *string `json:"thumbnail_url,omitempty"`
+}
+
+// ProjectSuccessResponse defines the structure for a successful response for a single project.
+type ProjectSuccessResponse struct {
+	Status  string         `json:"status"`
+	Message string         `json:"message"`
+	Data    models.Project `json:"data"`
+}
+
+// ProjectListSuccessResponse defines the structure for a successful response when listing projects.
+// It includes the standard status and message fields, and a data field containing a slice of projects.
+type ProjectListSuccessResponse struct {
+	Status  string           `json:"status"`
+	Message string           `json:"message"`
+	Data    []models.Project `json:"data"`
+}
+
+// ErrorResponse defines a common structure for error responses.
+type ErrorResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+
+// CreateProject godoc
+// @Summary Create a new project
+// @Description Creates a new project with the provided name and optional description and thumbnail URL.
+// @Tags projects
+// @Accept  json
+// @Produce  json
+// @Param   project body CreateProjectRequest true "Project to create"
+// @Success 201 {object} ProjectSuccessResponse "Project created successfully"
+// @Failure 400 {object} ErrorResponse "Bad request if input is invalid (e.g., missing name)"
+// @Failure 500 {object} ErrorResponse "Internal server error if project creation fails"
+// @Router /projects [post]
 func CreateProject(c *fiber.Ctx) error {
 	log.Println("Received request to create a new project")
 
-	project := new(models.Project)
+	projectReq := new(CreateProjectRequest)
 
-	if err := c.BodyParser(project); err != nil {
+	if err := c.BodyParser(projectReq); err != nil {
 		log.Printf("Error parsing project data: %v", err)
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"status":  "error",
-			"message": fmt.Sprintf("Cannot parse project JSON: %v", err),
+		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+			Status:  "error",
+			Message: fmt.Sprintf("Cannot parse project JSON: %v", err),
 		})
 	}
 
-	project.CreatedAt = time.Now()
-	project.UpdatedAt = time.Now()
+	// TODO: Add validation for projectReq using validator package if needed, e.g., projectReq.Name is required.
+	// For now, assuming Name will be present as per `validate:"required"` if validator is globally applied.
+
+	projectToInsert := models.Project{
+		Name:         projectReq.Name,
+		Description:  projectReq.Description,
+		ThumbnailURL: projectReq.ThumbnailURL,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
 
 	// Create a map of the data to insert, excluding the ID field
 	// so the database can generate it.
 	projectDataToInsert := map[string]interface{}{
-		"name":        project.Name,
-		"created_at":  project.CreatedAt,
-		"updated_at":  project.UpdatedAt,
+		"name":        projectToInsert.Name,
+		"created_at":  projectToInsert.CreatedAt,
+		"updated_at":  projectToInsert.UpdatedAt,
 	}
-	if project.Description != nil {
-		projectDataToInsert["description"] = *project.Description
+	if projectToInsert.Description != nil {
+		projectDataToInsert["description"] = *projectToInsert.Description
 	}
-	if project.ThumbnailURL != nil { // Though not sent in curl, good to include if model supports
-		projectDataToInsert["thumbnail_url"] = *project.ThumbnailURL
+	if projectToInsert.ThumbnailURL != nil {
+		projectDataToInsert["thumbnail_url"] = *projectToInsert.ThumbnailURL
 	}
 
 	var results []models.Project
 
-	// Corrected Supabase Insert and Execute call chain
-	// Insert(data, upsert, onConflict, returning, count)
-	// Execute() returns (body []byte, count int64, error)
 	body, _, err := config.SupabaseClient.From("projects").
 		Insert(projectDataToInsert, false, "", "representation", "").
 		Execute()
 
 	if err != nil {
 		log.Printf("Error executing Supabase insert: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"status":  "error",
-			"message": fmt.Sprintf("Could not create project (execute phase): %v", err),
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+			Status:  "error",
+			Message: fmt.Sprintf("Could not create project (execute phase): %v", err),
 		})
 	}
 
-	// Unmarshal the response body into the results slice
 	if err := json.Unmarshal(body, &results); err != nil {
 		log.Printf("Error unmarshalling Supabase response: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"status":  "error",
-			"message": fmt.Sprintf("Could not process project creation response: %v", err),
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+			Status:  "error",
+			Message: fmt.Sprintf("Could not process project creation response: %v", err),
 		})
 	}
 
 	if len(results) == 0 {
 		log.Println("Error: Project data unmarshalled into an empty slice")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Failed to create project, unmarshalled data is empty.",
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+			Status:  "error",
+			Message: "Failed to create project, unmarshalled data is empty.",
 		})
 	}
 
 	log.Printf("Project created successfully: %+v", results[0])
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"status":  "success",
-		"message": "Project created successfully",
-		"data":    results[0],
+	return c.Status(fiber.StatusCreated).JSON(ProjectSuccessResponse{
+		Status:  "success",
+		Message: "Project created successfully",
+		Data:    results[0],
 	})
 }
 
-// GetProjects handles listing all projects.
+// GetProjects godoc
+// @Summary List all projects
+// @Description Retrieves a list of all projects from the database.
+// @Tags projects
+// @Accept  json
+// @Produce  json
+// @Success 200 {object} ProjectListSuccessResponse "Successfully retrieved list of projects"
+// @Failure 500 {object} ErrorResponse "Internal server error if projects cannot be retrieved"
+// @Router /projects [get]
 func GetProjects(c *fiber.Ctx) error {
 	log.Println("Received request to list projects")
 
@@ -95,26 +146,26 @@ func GetProjects(c *fiber.Ctx) error {
 	body, _, err := config.SupabaseClient.From("projects").Select("*", "", false).Execute()
 	if err != nil {
 		log.Printf("Error fetching projects from Supabase: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"status":  "error",
-			"message": fmt.Sprintf("Could not retrieve projects: %v", err),
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+			Status:  "error",
+			Message: fmt.Sprintf("Could not retrieve projects: %v", err),
 		})
 	}
 
 	// Unmarshal the response body into the projects slice
 	if err := json.Unmarshal(body, &projects); err != nil {
 		log.Printf("Error unmarshalling projects data: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"status":  "error",
-			"message": fmt.Sprintf("Could not process projects list: %v", err),
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+			Status:  "error",
+			Message: fmt.Sprintf("Could not process projects data: %v", err),
 		})
 	}
 
-	log.Printf("Successfully retrieved %d projects", len(projects))
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"status":  "success",
-		"message": "Projects retrieved successfully",
-		"data":    projects,
+	log.Printf("Successfully fetched %d projects", len(projects))
+	return c.Status(fiber.StatusOK).JSON(ProjectListSuccessResponse{
+		Status:  "success",
+		Message: "Projects retrieved successfully",
+		Data:    projects,
 	})
 }
 
