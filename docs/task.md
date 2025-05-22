@@ -61,14 +61,15 @@
   - Run the application, submit various jobs.
   - Verify records in Supabase: `PENDING` -> `PROCESSING` -> `COMPLETED`/`FAILED`.
   - Check `input_payload`, `output_details`, `error_message` are correctly stored.
+  - **Status: Done**
 
 ## Phase 4 – AI Service (Python)
 | ID | Task | Status |
 |----|------|-------|
-| A-1 | Set up FastAPI service with model loading | 🔵 |
-| A-2 | Implement Whisper for transcription | 🔵 |
+| A-1 | Set up FastAPI service with model loading | 🟢 |
+| A-2 | Implement Whisper for transcription | 🟢 |
 | A-3 | Create highlight detection service | 🔵 |
-| A-4 | Build virality score prediction | 🔵 |
+<!-- | A-4 | Build virality score prediction | 🔵 | -->
 <!-- | A-5 | Implement B-roll suggestion service | 🔵 | -->
 | A-6 | Create caption formatting optimization | 🔵 |
 | A-7 | Build gRPC interface for Go service communication | 🔵 |
