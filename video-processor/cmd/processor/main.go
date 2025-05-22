@@ -39,11 +39,9 @@ func main() {
 	dispatcher := worker.NewDispatcher(5, 100) // 5 workers, queue size 100
 	dispatcher.Run()
 
-	// --- Submit an ExtractClipJob ---
+	// --- Submit an ExtractClipJob (Commented out for now) ---
 	inputFile := "/Users/akinpound/Documents/experiments/videothingy/video-processor/internal/ffmpeg/test/test.mp4"
-	// Construct output path in the same directory as the input file
-	// For this, we need path/filepath, so let's re-add the import.
-	// It's better to have job types in their own package eventually to avoid main.go growing too large.
+	/*
 	outputFile := "/Users/akinpound/Documents/experiments/videothingy/video-processor/internal/ffmpeg/test/test_clip_from_job.mp4"
 
 	clipJob := &jobs.ExtractClipJob{
@@ -53,10 +51,35 @@ func main() {
 		StartTime:    10 * time.Second,
 		ClipDuration: 15 * time.Second,
 	}
-
-	dispatcher.SubmitJob(clipJob) // Corrected method name
+	dispatcher.SubmitJob(clipJob)
 	log.Printf("Submitted ExtractClipJob %s to dispatcher.", clipJob.ID())
+	*/
 	// --- End Submit an ExtractClipJob ---
+
+	// --- Submit a GetVideoMetadataJob (Commented out for now) ---
+	/*
+	metadataJob := &jobs.GetVideoMetadataJob{
+		JobID:     "metadata_job_1",
+		InputFile: inputFile, // Using the same input file
+	}
+	dispatcher.SubmitJob(metadataJob)
+	log.Printf("Submitted GetVideoMetadataJob %s to dispatcher.", metadataJob.ID())
+	*/
+	// --- End Submit a GetVideoMetadataJob ---
+
+	// --- Submit an OverlayCaptionsJob ---
+	captionsFile := "/Users/akinpound/Documents/experiments/videothingy/video-processor/internal/ffmpeg/test/test_captions.srt"
+	outputFileWithCaptions := "/Users/akinpound/Documents/experiments/videothingy/video-processor/internal/ffmpeg/test/test_with_captions.mp4"
+
+	overlayJob := &jobs.OverlayCaptionsJob{
+		JobID:        "overlay_job_1",
+		InputFile:    inputFile,
+		CaptionsFile: captionsFile,
+		OutputFile:   outputFileWithCaptions,
+	}
+	dispatcher.SubmitJob(overlayJob)
+	log.Printf("Submitted OverlayCaptionsJob %s to dispatcher.", overlayJob.ID())
+	// --- End Submit an OverlayCaptionsJob ---
 
 	/* Commenting out SampleJob submission for now
 	// Submit some sample jobs

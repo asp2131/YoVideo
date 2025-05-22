@@ -86,6 +86,67 @@ func ExtractClip(inputFile, outputFile string, startTime, clipDuration time.Dura
 	return nil
 }
 
+// GetFullVideoMetadata retrieves comprehensive format and stream metadata for a video file.
+func GetFullVideoMetadata(filePath string) (map[string]interface{}, error) {
+	cmd := exec.Command("ffprobe",
+		"-v", "quiet",
+		"-print_format", "json",
+		"-show_format",
+		"-show_streams",
+		filePath,
+	)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err != nil {
+		return nil, fmt.Errorf("ffprobe -show_format -show_streams failed: %v\nStderr: %s", err, stderr.String())
+	}
+
+	var metadata map[string]interface{}
+	if err := json.Unmarshal(stdout.Bytes(), &metadata); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal ffprobe JSON output: %v\nStdout: %s", err, stdout.String())
+	}
+
+	log.Printf("Successfully retrieved full metadata for '%s'", filePath)
+	return metadata, nil
+}
+
+// OverlayCaptions overlays the captions from captionsFile (e.g., SRT) onto the inputFile video,
+// saving the result to outputFile.
+func OverlayCaptions(inputFile, captionsFile, outputFile string) error {
+	// ffmpeg -i inputFile -vf subtitles=captionsFile outputFile
+	// Ensure the captionsFile path is properly escaped for FFmpeg if it contains special characters.
+	// For simplicity, we assume paths are straightforward here.
+	// FFmpeg might need absolute paths for subtitle files, or paths relative to its CWD.
+	// Using absolute paths is generally safer.
+
+	// Construct the filter string. Note: paths in subtitles filter might need careful handling
+	// depending on OS and FFmpeg version, especially with special characters or spaces.
+	// For FFmpeg on Unix-like systems, direct path usually works.
+	// On Windows, paths might need escaping (e.g., C\:\\path\\to\\file.srt).
+	// Let's assume Unix-like paths for now.
+	subtitlesFilter := fmt.Sprintf("subtitles='%s'", captionsFile)
+
+	cmd := exec.Command("ffmpeg",
+		"-y", // Overwrite output file if it exists
+		"-i", inputFile,
+		"-vf", subtitlesFilter,
+		outputFile,
+	)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("ffmpeg -vf subtitles failed: %v\nStderr: %s", err, stderr.String())
+	}
+
+	log.Printf("Successfully overlaid captions from '%s' onto '%s', output to '%s'", captionsFile, inputFile, outputFile)
+	return nil
+}
+
 // TODO: Add more FFmpeg wrapper functions here, e.g.:
-// - OverlayCaptions(inputFile, outputFile, captionsFile string) error
-// - GetVideoMetadata(filePath string) (map[string]interface{}, error) // More comprehensive metadata
