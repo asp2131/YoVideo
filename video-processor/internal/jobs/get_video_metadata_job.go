@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 
@@ -8,44 +9,66 @@ import (
 )
 
 // GetVideoMetadataJob defines a job for retrieving video metadata.
-// It implements the worker.Job interface implicitly.
 type GetVideoMetadataJob struct {
-	JobID     string
+	JobID     string // Original job ID
 	InputFile string
+	dbJobID   string // Stores the job_id from the database
 }
 
-// Execute performs the metadata retrieval using the ffmpeg package.
-func (gmj *GetVideoMetadataJob) Execute() error {
-	log.Printf("Executing GetVideoMetadataJob %s: InputFile='%s'", gmj.JobID, gmj.InputFile)
+// GetVideoMetadataJobPayload defines the structure for the input_payload.
+type GetVideoMetadataJobPayload struct {
+	JobID     string `json:"job_id"`
+	InputFile string `json:"input_file"`
+}
 
-	metadata, err := ffmpeg.GetFullVideoMetadata(gmj.InputFile)
+// NewGetVideoMetadataJob creates a new GetVideoMetadataJob.
+func NewGetVideoMetadataJob(jobID, inputFile string) *GetVideoMetadataJob {
+	return &GetVideoMetadataJob{
+		JobID:     jobID,
+		InputFile: inputFile,
+	}
+}
+
+// ID returns the unique identifier of the job.
+func (j *GetVideoMetadataJob) ID() string {
+	return j.JobID
+}
+
+// Execute performs the metadata retrieval.
+// It now returns the metadata (as interface{}) and an error.
+func (j *GetVideoMetadataJob) Execute() (interface{}, error) {
+	log.Printf("Executing GetVideoMetadataJob %s (DB ID: %s): Retrieving metadata for %s", j.JobID, j.dbJobID, j.InputFile)
+
+	metadata, err := ffmpeg.GetFullVideoMetadata(j.InputFile)
 	if err != nil {
-		log.Printf("Error executing GetVideoMetadataJob %s: %v", gmj.JobID, err)
-		return fmt.Errorf("GetVideoMetadataJob %s failed: %w", gmj.JobID, err)
+		return nil, fmt.Errorf("failed to get video metadata for job %s (DB ID: %s): %w", j.JobID, j.dbJobID, err)
 	}
 
-	// Log some basic info from the metadata
-	formatName := "unknown"
-	if format, ok := metadata["format"].(map[string]interface{}); ok {
-		if fn, ok := format["format_name"].(string); ok {
-			formatName = fn
-		}
-	}
-	numStreams := 0
-	if streams, ok := metadata["streams"].([]interface{}); ok {
-		numStreams = len(streams)
-	}
-
-	log.Printf("Finished GetVideoMetadataJob %s: File='%s', Format='%s', Streams=%d",
-		gmj.JobID, gmj.InputFile, formatName, numStreams)
-	// For more detailed logging, you could marshal the whole metadata map to JSON and log it:
-	// metadataJSON, _ := json.MarshalIndent(metadata, "", "  ")
-	// log.Printf("Full metadata for %s:\n%s", gmj.InputFile, string(metadataJSON))
-
-	return nil
+	// For logging, let's marshal the metadata to a string if it's complex
+	metadataJSON, _ := json.Marshal(metadata)
+	log.Printf("GetVideoMetadataJob %s (DB ID: %s) completed successfully. Metadata: %s", j.JobID, j.dbJobID, string(metadataJSON))
+	return metadata, nil
 }
 
-// ID returns the unique identifier for GetVideoMetadataJob.
-func (gmj *GetVideoMetadataJob) ID() string {
-	return gmj.JobID
+// SetDBJobID sets the database-specific job ID.
+func (j *GetVideoMetadataJob) SetDBJobID(id string) {
+	j.dbJobID = id
+}
+
+// GetDBJobID returns the database-specific job ID.
+func (j *GetVideoMetadataJob) GetDBJobID() string {
+	return j.dbJobID
+}
+
+// Type returns the type of the job.
+func (j *GetVideoMetadataJob) Type() string {
+	return "GET_METADATA"
+}
+
+// Payload returns the input parameters of the job for database logging.
+func (j *GetVideoMetadataJob) Payload() interface{} {
+	return GetVideoMetadataJobPayload{
+		JobID:     j.JobID,
+		InputFile: j.InputFile,
+	}
 }

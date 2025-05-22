@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"videothingy/video-processor/internal/db" // Added for Supabase client
 	"videothingy/video-processor/internal/jobs"
 	"videothingy/video-processor/internal/worker"
 )
@@ -34,6 +35,11 @@ func (sj *SampleJob) ID() string {
 func main() {
 	log.Println("Starting Video Processor...")
 
+	// Initialize Supabase Client
+	if err := db.InitSupabaseClient(); err != nil {
+		log.Fatalf("Failed to initialize Supabase client: %v. Ensure SUPABASE_URL and SUPABASE_SERVICE_KEY are set.", err)
+	}
+
 	// Initialize Dispatcher
 	// Parameters: maxWorkers, jobQueueSize
 	dispatcher := worker.NewDispatcher(5, 100) // 5 workers, queue size 100
@@ -45,22 +51,25 @@ func main() {
 	// --- Submit an ExtractClipJob ---
 	outputClipFile := "/Users/akinpound/Documents/experiments/videothingy/video-processor/internal/ffmpeg/test/test_clip_from_job.mp4"
 
-	clipJob := &jobs.ExtractClipJob{
-		JobID:        "clip_job_1",
-		InputFile:    inputFile,
-		OutputFile:   outputClipFile,
-		StartTime:    10 * time.Second,
-		ClipDuration: 15 * time.Second, // Increased duration as per previous request
+	clipJob, err := jobs.NewExtractClipJob(
+		"clip_job_1",
+		inputFile,
+		outputClipFile,
+		"10s", // StartTime as string
+		"15s", // ClipDuration as string
+	)
+	if err != nil {
+		log.Fatalf("Error creating clipJob: %v", err)
 	}
 	dispatcher.SubmitJob(clipJob)
 	log.Printf("Submitted ExtractClipJob %s to dispatcher.", clipJob.ID())
 	// --- End Submit an ExtractClipJob ---
 
 	// --- Submit a GetVideoMetadataJob ---
-	metadataJob := &jobs.GetVideoMetadataJob{
-		JobID:     "metadata_job_1",
-		InputFile: inputFile, // Using the same input file
-	}
+	metadataJob := jobs.NewGetVideoMetadataJob(
+		"metadata_job_1",
+		inputFile, // Using the same input file
+	)
 	dispatcher.SubmitJob(metadataJob)
 	log.Printf("Submitted GetVideoMetadataJob %s to dispatcher.", metadataJob.ID())
 	// --- End Submit a GetVideoMetadataJob ---
@@ -69,12 +78,12 @@ func main() {
 	captionsFile := "/Users/akinpound/Documents/experiments/videothingy/video-processor/internal/ffmpeg/test/test_captions.srt"
 	outputFileWithCaptions := "/Users/akinpound/Documents/experiments/videothingy/video-processor/internal/ffmpeg/test/test_with_captions.mp4"
 
-	overlayJob := &jobs.OverlayCaptionsJob{
-		JobID:        "overlay_job_1",
-		InputFile:    inputFile, // Overlaying on the original input file
-		CaptionsFile: captionsFile,
-		OutputFile:   outputFileWithCaptions,
-	}
+	overlayJob := jobs.NewOverlayCaptionsJob(
+		"overlay_job_1",
+		inputFile, // Overlaying on the original input file
+		captionsFile,
+		outputFileWithCaptions,
+	)
 	dispatcher.SubmitJob(overlayJob)
 	log.Printf("Submitted OverlayCaptionsJob %s to dispatcher.", overlayJob.ID())
 	// --- End Submit an OverlayCaptionsJob ---

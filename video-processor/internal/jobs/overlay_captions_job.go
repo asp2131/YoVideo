@@ -8,31 +8,74 @@ import (
 )
 
 // OverlayCaptionsJob defines a job for overlaying captions onto a video.
-// It implements the worker.Job interface implicitly.
 type OverlayCaptionsJob struct {
-	JobID        string
+	JobID        string // Original job ID
 	InputFile    string
-	CaptionsFile string // Path to the SRT file
+	CaptionsFile string
 	OutputFile   string
+	dbJobID      string // Stores the job_id from the database
 }
 
-// Execute performs the caption overlay using the ffmpeg package.
-func (ocj *OverlayCaptionsJob) Execute() error {
-	log.Printf("Executing OverlayCaptionsJob %s: Input='%s', Captions='%s', Output='%s'",
-		ocj.JobID, ocj.InputFile, ocj.CaptionsFile, ocj.OutputFile)
+// OverlayCaptionsJobPayload defines the structure for the input_payload.
+type OverlayCaptionsJobPayload struct {
+	JobID        string `json:"job_id"`
+	InputFile    string `json:"input_file"`
+	CaptionsFile string `json:"captions_file"`
+	OutputFile   string `json:"output_file"`
+}
 
-	err := ffmpeg.OverlayCaptions(ocj.InputFile, ocj.CaptionsFile, ocj.OutputFile)
+// NewOverlayCaptionsJob creates a new OverlayCaptionsJob.
+func NewOverlayCaptionsJob(jobID, inputFile, captionsFile, outputFile string) *OverlayCaptionsJob {
+	return &OverlayCaptionsJob{
+		JobID:        jobID,
+		InputFile:    inputFile,
+		CaptionsFile: captionsFile,
+		OutputFile:   outputFile,
+	}
+}
+
+// ID returns the unique identifier of the job.
+func (j *OverlayCaptionsJob) ID() string {
+	return j.JobID
+}
+
+// Execute performs the caption overlay.
+// It now returns output details (e.g., output file path) and an error.
+func (j *OverlayCaptionsJob) Execute() (interface{}, error) {
+	log.Printf("Executing OverlayCaptionsJob %s (DB ID: %s): Overlaying %s on %s, output to %s",
+		j.JobID, j.dbJobID, j.CaptionsFile, j.InputFile, j.OutputFile)
+
+	err := ffmpeg.OverlayCaptions(j.InputFile, j.CaptionsFile, j.OutputFile)
 	if err != nil {
-		log.Printf("Error executing OverlayCaptionsJob %s: %v", ocj.JobID, err)
-		return fmt.Errorf("OverlayCaptionsJob %s failed: %w", ocj.JobID, err)
+		return nil, fmt.Errorf("failed to overlay captions for job %s (DB ID: %s): %w", j.JobID, j.dbJobID, err)
 	}
 
-	log.Printf("Finished OverlayCaptionsJob %s: Successfully overlaid captions on '%s' to create '%s'",
-		ocj.JobID, ocj.InputFile, ocj.OutputFile)
-	return nil
+	log.Printf("OverlayCaptionsJob %s (DB ID: %s) completed successfully. Output: %s", j.JobID, j.dbJobID, j.OutputFile)
+	outputDetails := map[string]string{"output_file": j.OutputFile}
+	return outputDetails, nil
 }
 
-// ID returns the unique identifier for OverlayCaptionsJob.
-func (ocj *OverlayCaptionsJob) ID() string {
-	return ocj.JobID
+// SetDBJobID sets the database-specific job ID.
+func (j *OverlayCaptionsJob) SetDBJobID(id string) {
+	j.dbJobID = id
+}
+
+// GetDBJobID returns the database-specific job ID.
+func (j *OverlayCaptionsJob) GetDBJobID() string {
+	return j.dbJobID
+}
+
+// Type returns the type of the job.
+func (j *OverlayCaptionsJob) Type() string {
+	return "OVERLAY_CAPTIONS"
+}
+
+// Payload returns the input parameters of the job for database logging.
+func (j *OverlayCaptionsJob) Payload() interface{} {
+	return OverlayCaptionsJobPayload{
+		JobID:        j.JobID,
+		InputFile:    j.InputFile,
+		CaptionsFile: j.CaptionsFile,
+		OutputFile:   j.OutputFile,
+	}
 }

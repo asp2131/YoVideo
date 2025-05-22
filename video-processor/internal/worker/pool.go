@@ -3,14 +3,19 @@ package worker
 import (
 	"log"
 	"sync"
+
+	"videothingy/video-processor/internal/db" // Added for DB interactions
 )
 
-// Job represents a unit of work to be executed.
-// It could carry data specific to the task, e.g., video ID, processing parameters.
-
+// Job represents a unit of work to be processed.
+// It includes methods for execution and identification, and now for DB interaction.
 type Job interface {
-	Execute() error // The method that performs the actual work
-	ID() string       // A unique identifier for the job
+	ID() string                                 // Original ID, can be different from DB Job ID
+	Execute() (outputDetails interface{}, err error) // Modified to return output
+	SetDBJobID(id string)                       // For storing the DB-generated job_id
+	GetDBJobID() string                         // For retrieving the DB-generated job_id
+	Type() string                               // e.g., "EXTRACT_CLIP", "GET_METADATA"
+	Payload() interface{}                       // To get input parameters for DB logging
 }
 
 // Worker is responsible for processing jobs.
@@ -45,13 +50,37 @@ func (w Worker) Start() {
 
 			select {
 			case job := <-w.JobChannel:
-				log.Printf("Worker %d: Started job %s", w.ID, job.ID())
-				if err := job.Execute(); err != nil {
-					log.Printf("Worker %d: Error processing job %s: %v", w.ID, job.ID(), err)
-					// TODO: Implement error handling (e.g., retry, dead-letter queue)
-				} else {
-					log.Printf("Worker %d: Finished job %s", w.ID, job.ID())
+				dbJobID := job.GetDBJobID() // Get DB Job ID stored by Dispatcher
+				log.Printf("Worker %d: Started job %s (DB ID: %s)", w.ID, job.ID(), dbJobID)
+
+				// Update status to PROCESSING
+				if dbJobID != "" {
+					if err := db.UpdateJobStatus(dbJobID, "PROCESSING", nil, ""); err != nil {
+						log.Printf("Worker %d: Failed to update job %s (DB ID: %s) status to PROCESSING: %v", w.ID, job.ID(), dbJobID, err)
+						// Decide if we should continue or skip job if status update fails. For now, continue.
+					}
 				}
+
+				output, err := job.Execute()
+
+				if dbJobID != "" { // Update status based on execution result
+					if err != nil {
+						log.Printf("Worker %d: Error processing job %s (DB ID: %s): %v", w.ID, job.ID(), dbJobID, err)
+						if updateErr := db.UpdateJobStatus(dbJobID, "FAILED", nil, err.Error()); updateErr != nil {
+							log.Printf("Worker %d: Also failed to update job %s (DB ID: %s) status to FAILED: %v", w.ID, job.ID(), dbJobID, updateErr)
+						}
+					} else {
+						log.Printf("Worker %d: Finished job %s (DB ID: %s) with output: %+v", w.ID, job.ID(), dbJobID, output)
+						if updateErr := db.UpdateJobStatus(dbJobID, "COMPLETED", output, ""); updateErr != nil {
+							log.Printf("Worker %d: Failed to update job %s (DB ID: %s) status to COMPLETED: %v", w.ID, job.ID(), dbJobID, updateErr)
+						}
+					}
+				} else if err != nil { // Case where dbJobID was not set, but job failed
+					log.Printf("Worker %d: Error processing job %s (DB ID not set): %v", w.ID, job.ID(), err)
+				} else { // Case where dbJobID was not set, and job succeeded
+					log.Printf("Worker %d: Finished job %s (DB ID not set) with output: %+v", w.ID, job.ID(), output)
+				}
+
 			case <-w.Quit:
 				log.Printf("Worker %d: Stopping", w.ID)
 				return
@@ -122,15 +151,31 @@ func (d *Dispatcher) dispatch() {
 	}
 }
 
-// SubmitJob adds a job to the job queue.
+// SubmitJob sends a job to the job queue.
 func (d *Dispatcher) SubmitJob(job Job) {
-	// Non-blocking submit, or handle queue full scenario
+	// Create a record in the database for this job
+	dbJobID, err := db.CreateJobRecord(job.Type(), job.Payload())
+	if err != nil {
+		log.Printf("Dispatcher: Failed to create DB record for job %s (Type: %s): %v. Job will not be submitted.", job.ID(), job.Type(), err)
+		// Depending on policy, we might want to still queue the job, or have a fallback.
+		// For now, if DB record creation fails, we don't queue it.
+		return
+	}
+	job.SetDBJobID(dbJobID) // Store the DB-generated job_id in the job itself
+	log.Printf("Dispatcher: Job %s (Type: %s) recorded in DB with ID: %s", job.ID(), job.Type(), dbJobID)
+
 	select {
 	case d.JobQueue <- job:
-		log.Printf("Dispatcher: Job %s submitted to queue.", job.ID())
+		log.Printf("Dispatcher: Job %s (DB ID: %s) submitted to queue.", job.ID(), dbJobID)
 	default:
-		log.Printf("Dispatcher: Job queue full. Job %s could not be submitted.", job.ID())
-		// TODO: Handle queue full scenario (e.g., return error, retry, etc.)
+		log.Printf("Dispatcher: Job queue full. Job %s (DB ID: %s) could not be submitted.", job.ID(), dbJobID)
+		// If the queue is full, the job was recorded in DB as PENDING but won't be processed immediately.
+		// This state needs to be managed (e.g., a separate process could pick up PENDING jobs later, or status needs update).
+		// For now, we'll log it. A more robust system might update status to QUEUE_FAILED or similar.
+		// Or, try to re-submit later.
+		if err := db.UpdateJobStatus(dbJobID, "QUEUE_FAILED", nil, "Job queue was full"); err != nil {
+			log.Printf("Dispatcher: Also failed to update status for job %s (DB ID: %s) to QUEUE_FAILED: %v", job.ID(), dbJobID, err)
+		}
 	}
 }
 
