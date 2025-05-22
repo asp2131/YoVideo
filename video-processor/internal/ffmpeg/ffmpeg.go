@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os/exec"
 	"strconv"
 	"time"
@@ -55,7 +56,36 @@ func GetVideoDuration(filePath string) (time.Duration, error) {
 	return time.Duration(durationFloat * float64(time.Second)), nil
 }
 
+// ExtractClip creates a video clip from the inputFile, starting at startTime and lasting for clipDuration.
+// The output is saved to outputFile.
+// It uses '-c copy' for fast, lossless clipping where possible.
+func ExtractClip(inputFile, outputFile string, startTime, clipDuration time.Duration) error {
+	// Format startTime and clipDuration for FFmpeg (e.g., in seconds)
+	startSeconds := fmt.Sprintf("%.3f", startTime.Seconds())
+	durationSeconds := fmt.Sprintf("%.3f", clipDuration.Seconds())
+
+	// ffmpeg -y -i <inputFile> -ss <startTime> -t <duration> <outputFile>
+	cmd := exec.Command("ffmpeg",
+		"-y", // Overwrite output file if it exists
+		"-i", inputFile,
+		"-ss", startSeconds,
+		"-t", durationSeconds,
+		// "-c", "copy", // Removed for frame accuracy; allows re-encoding
+		outputFile,
+	)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("ffmpeg -ss failed: %v\nStderr: %s", err, stderr.String())
+	}
+
+	log.Printf("Successfully extracted clip from '%s' to '%s' (start: %s, duration: %s)", inputFile, outputFile, startTime, clipDuration)
+	return nil
+}
+
 // TODO: Add more FFmpeg wrapper functions here, e.g.:
-// - ExtractClip(inputFile, outputFile string, startTime, duration time.Duration) error
 // - OverlayCaptions(inputFile, outputFile, captionsFile string) error
 // - GetVideoMetadata(filePath string) (map[string]interface{}, error) // More comprehensive metadata

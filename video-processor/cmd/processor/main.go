@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -35,16 +36,21 @@ func (sj *SampleJob) ID() string {
 func main() {
 	log.Println("Starting Video Processor...")
 
-	// --- Test FFmpeg GetVideoDuration ---
-	videoFilePath := "/Users/akinpound/Documents/experiments/videothingy/video-processor/internal/ffmpeg/test/test.mp4" // <<<< IMPORTANT: REPLACE THIS WITH YOUR ACTUAL VIDEO FILE PATH
-	log.Printf("Attempting to get duration for video: %s", videoFilePath)
-	duration, err := ffmpeg.GetVideoDuration(videoFilePath)
+	// --- Test FFmpeg ExtractClip ---
+	inputFile := "/Users/akinpound/Documents/experiments/videothingy/video-processor/internal/ffmpeg/test/test.mp4"
+	outputDir := filepath.Dir(inputFile)
+	outputFile := filepath.Join(outputDir, "test_clip.mp4")
+	startTime := 10 * time.Second
+	clipDuration := 5 * time.Second
+
+	log.Printf("Attempting to extract clip from '%s' to '%s' (start: %s, duration: %s)", inputFile, outputFile, startTime, clipDuration)
+	err := ffmpeg.ExtractClip(inputFile, outputFile, startTime, clipDuration)
 	if err != nil {
-		log.Fatalf("Error getting video duration: %v", err)
+		log.Fatalf("Error extracting clip: %v", err)
 	} else {
-		log.Printf("Video duration for '%s': %s", videoFilePath, duration.String())
+		log.Printf("Successfully extracted clip to '%s'", outputFile)
 	}
-	// --- End Test FFmpeg GetVideoDuration ---
+	// --- End Test FFmpeg ExtractClip ---
 
 	// Initialize Dispatcher
 	// Parameters: maxWorkers, jobQueueSize
