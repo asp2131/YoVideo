@@ -71,13 +71,18 @@
 | A-3 | Create highlight detection service | 🔵 |
 <!-- | A-4 | Build virality score prediction | 🔵 | -->
 <!-- | A-5 | Implement B-roll suggestion service | 🔵 | -->
-| A-6 | Create caption formatting optimization | 🔵 |
+| A-6 | Create caption formatting optimization | 🟢 |
 | A-7 | Build gRPC interface for Go service communication | 🔵 |
 | A-8 | Implement batch processing for efficiency | 🔵 |
-| A-9 | Add model caching for performance | 🔵 |
-| A-10 | Create fallback mechanisms for model failures | 🔵 |
-| A-11 | Add error handling and logging | 🔵 |
-| A-12 | Implement monitoring for AI service health | 🔵 |
+| A-9 | Connect the frontend to the API gateway | 🔵 |
+| A-10 | Connect the API gateway to the AI service | 🔵 |
+| A-11 | Implement gRPC server for AI service | 🟢 |
+| A-12 | Implement gRPC client for Go service | 🔵 |
+| A-13 | Make sure everything is connected and works for MVP | 🔵 |
+| A-14 | Implement model caching for performance | 🔵 |
+| A-15 | Create fallback mechanisms for model failures | 🔵 |
+| A-16 | Add error handling and logging | 🔵 |
+| A-17 | Implement monitoring for AI service health | 🔵 |
 
 ## Technical Implementation Details
 

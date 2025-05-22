@@ -1,4 +1,5 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
+from pydantic import BaseModel
 import whisper
 import os
 import shutil
@@ -8,6 +9,36 @@ import logging
 # Configure basic logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# --- Pydantic Models for Highlight Detection ---
+class TranscriptSegment(BaseModel):
+    text: str
+    start_time: float
+    end_time: float
+
+class HighlightDetectionRequest(BaseModel):
+    segments: list[TranscriptSegment]
+    # num_highlights: int = 5 # Optional: to limit results
+
+class Highlight(TranscriptSegment):
+    score: float
+
+class HighlightDetectionResponse(BaseModel):
+    highlights: list[Highlight]
+
+# --- Pydantic Model for Transcription Response ---
+class TranscriptionResponse(BaseModel):
+    filename: str
+    segments: list[TranscriptSegment]
+
+# --- Pydantic Models for Caption Formatting ---
+class CaptionFormatRequest(BaseModel):
+    segments: list[TranscriptSegment]
+    max_chars_per_line: int = 40
+    max_lines_per_caption: int = 2
+
+class CaptionFormatResponse(BaseModel):
+    srt_content: str
 
 app = FastAPI(
     title="VideoThingy AI Service",
@@ -35,7 +66,7 @@ except Exception as e:
     logger.error(f"Failed to load Whisper model: {e}")
     whisper_model = None # Set to None if loading fails
 
-@app.post("/transcribe")
+@app.post("/transcribe", response_model=TranscriptionResponse)
 async def transcribe_audio(audio_file: UploadFile = File(...)):
     if whisper_model is None:
         raise HTTPException(status_code=500, detail="Whisper model is not available.")
@@ -56,8 +87,16 @@ async def transcribe_audio(audio_file: UploadFile = File(...)):
         # Transcribe the audio file
         logger.info(f"Starting transcription for {tmp_audio_file_path}...")
         result = whisper_model.transcribe(tmp_audio_file_path, fp16=False) # fp16=False for CPU, set to True if on GPU and supported
-        transcription_text = result["text"]
-        logger.info(f"Transcription successful.")
+        logger.info(f"Transcription successful. Processing segments...")
+
+        processed_segments = []
+        for seg in result.get("segments", []):
+            processed_segments.append(
+                TranscriptSegment(text=seg.get("text", ""), 
+                                  start_time=seg.get("start", 0.0),
+                                  end_time=seg.get("end", 0.0))
+            )
+        logger.info(f"Processed {len(processed_segments)} segments.")
 
     except Exception as e:
         logger.error(f"Error during transcription: {e}")
@@ -70,7 +109,104 @@ async def transcribe_audio(audio_file: UploadFile = File(...)):
         # Ensure the uploaded file's resources are closed
         await audio_file.close()
 
-    return {"filename": audio_file.filename, "transcription": transcription_text}
+    return TranscriptionResponse(filename=audio_file.filename, segments=processed_segments)
+
+# --- Highlight Detection Endpoint ---
+INTERESTING_KEYWORDS = [
+    "important", "key", "remember", "secret", "amazing", "best part",
+    "check out", "don't miss", "finally", "conclusion", "summary",
+    "main point", "critical", "essential", "must-see", "must-watch",
+    "highlight", "takeaway", "lesson learned", "advice", "tip",
+    "what if", "how to", "why", "because", "actually", "literally",
+    "believe it or not", "you won't believe", "insane", "crazy"
+]
+
+@app.post("/detect-highlights", response_model=HighlightDetectionResponse)
+async def detect_highlights(request: HighlightDetectionRequest):
+    detected_highlights = []
+    min_score_to_include = 1 # Include segment if at least one keyword is found
+
+    for segment in request.segments:
+        score = 0
+        segment_text_lower = segment.text.lower()
+        for keyword in INTERESTING_KEYWORDS:
+            if keyword.lower() in segment_text_lower:
+                score += 1
+        
+        if score >= min_score_to_include:
+            detected_highlights.append(
+                Highlight(text=segment.text, start_time=segment.start_time, end_time=segment.end_time, score=float(score))
+            )
+
+    # Optional: Sort by score and take top N
+    # detected_highlights.sort(key=lambda h: h.score, reverse=True)
+    # detected_highlights = detected_highlights[:request.num_highlights] # if num_highlights is part of request
+
+    if not detected_highlights and request.segments: # If no keywords found, maybe return the longest segment or first few?
+        # For now, just return empty if no keywords trigger.
+        pass
+
+    return HighlightDetectionResponse(highlights=detected_highlights)
+
+
+# --- Caption Formatting Endpoint ---
+def format_srt_time(seconds: float) -> str:
+    """Converts seconds to SRT time format HH:MM:SS,mmm."""
+    millis = int(round(seconds * 1000))
+    ss, millis = divmod(millis, 1000)
+    mm, ss = divmod(ss, 60)
+    hh, mm = divmod(mm, 60)
+    return f"{hh:02d}:{mm:02d}:{ss:02d},{millis:03d}"
+
+def break_text_into_lines(text: str, max_chars: int, max_lines: int) -> list[str]:
+    """Breaks text into lines with max_chars and max_lines constraints."""
+    words = text.strip().split()
+    lines = []
+    current_line = ""
+    if not words:
+        return []
+
+    for word in words:
+        if not current_line:
+            current_line = word
+        elif len(current_line) + 1 + len(word) <= max_chars:
+            current_line += " " + word
+        else:
+            if len(lines) < max_lines -1: # -1 because we are about to add current_line
+                lines.append(current_line)
+                current_line = word
+            else: # Max lines reached, append rest to current_line (it might get long)
+                current_line += " " + word # Or decide to truncate/discard
+    
+    if current_line: # Add the last line being built
+        lines.append(current_line)
+    
+    return lines[:max_lines] # Ensure we don't exceed max_lines due to final append
+
+@app.post("/format-captions", response_model=CaptionFormatResponse)
+async def format_captions_endpoint(request: CaptionFormatRequest):
+    srt_blocks = []
+    for i, segment in enumerate(request.segments):
+        start_srt_time = format_srt_time(segment.start_time)
+        end_srt_time = format_srt_time(segment.end_time)
+        
+        caption_lines = break_text_into_lines(
+            segment.text,
+            request.max_chars_per_line,
+            request.max_lines_per_caption
+        )
+        
+        if not caption_lines: # Skip empty segments if any
+            continue
+            
+        srt_block = f"{i+1}\n"
+        srt_block += f"{start_srt_time} --> {end_srt_time}\n"
+        srt_block += "\n".join(caption_lines)
+        srt_block += "\n\n" # Two newlines to separate blocks
+        srt_blocks.append(srt_block)
+        
+    return CaptionFormatResponse(srt_content="".join(srt_blocks).strip())
+
 
 if __name__ == "__main__":
     import uvicorn
