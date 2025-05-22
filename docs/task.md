@@ -57,6 +57,10 @@
 | V-11 | Add error handling and recovery mechanisms | 🟢 |
 | V-12 | Implement job status updates to database | 🟢 |
 | V-13 | Create cleanup service for temporary files | 🟢 |
+| V-14 | Testing & Verification | 🟢 |
+  - Run the application, submit various jobs.
+  - Verify records in Supabase: `PENDING` -> `PROCESSING` -> `COMPLETED`/`FAILED`.
+  - Check `input_payload`, `output_details`, `error_message` are correctly stored.
 
 ## Phase 4 – AI Service (Python)
 | ID | Task | Status |

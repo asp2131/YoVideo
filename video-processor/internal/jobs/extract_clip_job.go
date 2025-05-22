@@ -13,6 +13,8 @@ type ExtractClipJob struct {
 	JobID        string // Original job ID, can be different from DB job ID
 	InputFile    string
 	OutputFile   string
+	StartTimeStr string
+	ClipDurationStr string
 	StartTime    time.Duration // Corrected type
 	ClipDuration time.Duration // Corrected type
 	dbJobID      string        // Stores the job_id from the database
@@ -42,11 +44,13 @@ func NewExtractClipJob(jobID, inputFile, outputFile, startTimeStr, clipDurationS
 	}
 
 	return &ExtractClipJob{
-		JobID:        jobID,
-		InputFile:    inputFile,
-		OutputFile:   outputFile,
-		StartTime:    startTime,    // Parsed duration
-		ClipDuration: clipDuration, // Parsed duration
+		JobID:           jobID,
+		InputFile:       inputFile,
+		OutputFile:      outputFile,
+		StartTimeStr:    startTimeStr,
+		ClipDurationStr: clipDurationStr,
+		StartTime:       startTime,    // Parsed duration
+		ClipDuration:    clipDuration, // Parsed duration
 	}, nil
 }
 
@@ -58,8 +62,8 @@ func (j *ExtractClipJob) ID() string {
 // Execute performs the clip extraction.
 // It now returns output details (e.g., output file path) and an error.
 func (j *ExtractClipJob) Execute() (interface{}, error) {
-	log.Printf("Executing ExtractClipJob %s: Extracting %s from %s to %s (start: %s, duration: %s)",
-		j.JobID, j.InputFile, j.OutputFile, j.StartTime, j.ClipDuration, j.dbJobID) // Logging will use time.Duration's String() method
+	log.Printf("Executing ExtractClipJob %s (DB ID: %s): Extracting from %s to %s, StartTime: %s, ClipDuration: %s",
+		j.JobID, j.dbJobID, j.InputFile, j.OutputFile, j.StartTimeStr, j.ClipDurationStr)
 
 	err := ffmpeg.ExtractClip(j.InputFile, j.OutputFile, j.StartTime, j.ClipDuration)
 	if err != nil {
@@ -93,7 +97,7 @@ func (j *ExtractClipJob) Payload() interface{} {
 		JobID:        j.JobID, // This JobID is the one passed to NewExtractClipJob
 		InputFile:    j.InputFile,
 		OutputFile:   j.OutputFile,
-		StartTime:    j.StartTime.String(),    // Convert duration to string for payload
-		ClipDuration: j.ClipDuration.String(), // Convert duration to string for payload
+		StartTime:    j.StartTimeStr,    // Convert duration to string for payload
+		ClipDuration: j.ClipDurationStr, // Convert duration to string for payload
 	}
 }
