@@ -43,13 +43,13 @@
 ## Phase 3 – Video Processor (Go)
 | ID | Task | Status |
 |----|------|-------|
-| V-1 | Create worker pool architecture for processing tasks | 🔵 |
-| V-2 | Implement FFmpeg wrapper for video manipulation | 🔵 |
-| V-3 | Build video metadata extraction service (MVP: basic info) | 🔵 |
+| V-1 | Create worker pool architecture for processing tasks | 🟢 |
+| V-2 | Implement FFmpeg wrapper for video manipulation | 🟢 |
+| V-3 | Build video metadata extraction service (MVP: basic info) | 🟢 |
 | V-4 | Create transcription request handler to AI service | 🔵 |
 | V-5 | Implement highlight detection request handler | 🔵 |
-| V-6 | Build clip extraction service from timestamps | 🔵 |
-| V-7 | Create caption overlay renderer | 🔵 |
+| V-6 | Build clip extraction service from timestamps | 🟢 |
+| V-7 | Create caption overlay renderer | 🟢 |
 | V-8 | Implement aspect ratio adjustment service (Post-MVP) | 🔵 |
 | V-9 | Build template application service (Post-MVP) | 🔵 |
 <!-- | V-10 | Create B-roll insertion service | 🔵 | -->

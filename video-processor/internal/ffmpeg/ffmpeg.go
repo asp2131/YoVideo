@@ -149,4 +149,4 @@ func OverlayCaptions(inputFile, captionsFile, outputFile string) error {
 	return nil
 }
 
-// TODO: Add more FFmpeg wrapper functions here, e.g.:
+// Additional FFmpeg wrapper functions can be added here as needed.

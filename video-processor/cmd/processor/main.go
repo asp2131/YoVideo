@@ -39,32 +39,30 @@ func main() {
 	dispatcher := worker.NewDispatcher(5, 100) // 5 workers, queue size 100
 	dispatcher.Run()
 
-	// --- Submit an ExtractClipJob (Commented out for now) ---
+	// Define common input file
 	inputFile := "/Users/akinpound/Documents/experiments/videothingy/video-processor/internal/ffmpeg/test/test.mp4"
-	/*
-	outputFile := "/Users/akinpound/Documents/experiments/videothingy/video-processor/internal/ffmpeg/test/test_clip_from_job.mp4"
+
+	// --- Submit an ExtractClipJob ---
+	outputClipFile := "/Users/akinpound/Documents/experiments/videothingy/video-processor/internal/ffmpeg/test/test_clip_from_job.mp4"
 
 	clipJob := &jobs.ExtractClipJob{
 		JobID:        "clip_job_1",
 		InputFile:    inputFile,
-		OutputFile:   outputFile,
+		OutputFile:   outputClipFile,
 		StartTime:    10 * time.Second,
-		ClipDuration: 15 * time.Second,
+		ClipDuration: 15 * time.Second, // Increased duration as per previous request
 	}
 	dispatcher.SubmitJob(clipJob)
 	log.Printf("Submitted ExtractClipJob %s to dispatcher.", clipJob.ID())
-	*/
 	// --- End Submit an ExtractClipJob ---
 
-	// --- Submit a GetVideoMetadataJob (Commented out for now) ---
-	/*
+	// --- Submit a GetVideoMetadataJob ---
 	metadataJob := &jobs.GetVideoMetadataJob{
 		JobID:     "metadata_job_1",
 		InputFile: inputFile, // Using the same input file
 	}
 	dispatcher.SubmitJob(metadataJob)
 	log.Printf("Submitted GetVideoMetadataJob %s to dispatcher.", metadataJob.ID())
-	*/
 	// --- End Submit a GetVideoMetadataJob ---
 
 	// --- Submit an OverlayCaptionsJob ---
@@ -73,7 +71,7 @@ func main() {
 
 	overlayJob := &jobs.OverlayCaptionsJob{
 		JobID:        "overlay_job_1",
-		InputFile:    inputFile,
+		InputFile:    inputFile, // Overlaying on the original input file
 		CaptionsFile: captionsFile,
 		OutputFile:   outputFileWithCaptions,
 	}
