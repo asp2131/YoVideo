@@ -2,6 +2,7 @@ package aiclient
 
 import (
 	"log"
+	"context"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -54,13 +55,43 @@ func (c *AIClient) GetGRPCClient() aiservice.AIServiceClient {
 	return c.grpcClient
 }
 
-// You can add methods here to call specific RPCs, for example:
-/*
-func (c *AIClient) Transcribe(ctx context.Context, audioData []byte, originalFilename string) (*aiservice.TranscribeAudioResponse, error) {
+// TranscribeAudio sends an audio transcription request to the AI service.
+// It now takes a videoStoragePath instead of raw audioData.
+func (c *AIClient) TranscribeAudio(ctx context.Context, videoStoragePath string, originalFilename string) (*aiservice.TranscribeAudioResponse, error) {
+	log.Printf("AIClient: Sending TranscribeAudio request for video path %s (original file: %s)", videoStoragePath, originalFilename)
 	request := &aiservice.TranscribeAudioRequest{
-		AudioData:        audioData,
+		// AudioData:        audioData, // Field removed from .proto
+		VideoStoragePath: videoStoragePath,
 		OriginalFilename: originalFilename,
 	}
-	return c.grpcClient.TranscribeAudio(ctx, request)
+	
+	// Add a timeout to the context for the gRPC call
+	// ctx, cancel := context.WithTimeout(ctx, time.Second*30) // Example 30-second timeout
+	// defer cancel()
+
+	response, err := c.grpcClient.TranscribeAudio(ctx, request)
+	if err != nil {
+		log.Printf("AIClient: TranscribeAudio RPC failed for %s: %v", originalFilename, err)
+		return nil, err
+	}
+	log.Printf("AIClient: Received TranscribeAudio response for %s", originalFilename)
+	return response, nil
+}
+
+/*
+// Example for DetectHighlights
+func (c *AIClient) DetectHighlights(ctx context.Context, segments []*aiservice.TranscriptSegment) (*aiservice.DetectHighlightsResponse, error) {
+    request := &aiservice.DetectHighlightsRequest{Segments: segments}
+    return c.grpcClient.DetectHighlights(ctx, request)
+}
+
+// Example for FormatCaptions
+func (c *AIClient) FormatCaptions(ctx context.Context, segments []*aiservice.TranscriptSegment, maxChars int32, maxLines int32) (*aiservice.FormatCaptionsResponse, error) {
+    request := &aiservice.FormatCaptionsRequest{
+        Segments:           segments,
+        MaxCharsPerLine:    maxChars,
+        MaxLinesPerCaption: maxLines,
+    }
+    return c.grpcClient.FormatCaptions(ctx, request)
 }
 */

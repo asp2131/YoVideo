@@ -16,16 +16,19 @@ package main
 import (
 	"log"
 
+	"strings"
+	"videothingy/api-gateway/config"
+	_ "videothingy/api-gateway/docs" // Import generated docs (note the underscore)
+	"videothingy/api-gateway/handlers"
+	"videothingy/api-gateway/middleware"
+	"videothingy/api-gateway/utils"
+
+	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
-	"videothingy/api-gateway/config"
-	"videothingy/api-gateway/handlers"
-	"videothingy/api-gateway/utils"
-	"videothingy/api-gateway/middleware"
-	_ "videothingy/api-gateway/docs" // Import generated docs (note the underscore)
-	"github.com/go-playground/validator/v10"
-	"github.com/swaggo/fiber-swagger"   // fiber-swagger middleware
-	"strings"
+	fiberSwagger "github.com/swaggo/fiber-swagger" // fiber-swagger middleware
+
+	aiclient "videothingy/api-gateway/internal/aiclient"
 )
 
 func main() {
@@ -39,6 +42,24 @@ func main() {
 	config.InitLogger()
 	config.Log.Info("Logger initialized") // Example log
 
+	// Initialize AI Client
+	aiServiceAddr := config.AppConfig.AIServiceAddress // "localhost:50051" // Make this configurable
+	aiClient, err := aiclient.NewAIClient(aiServiceAddr)
+	if err != nil {
+		config.Log.Fatalf("Failed to create AI client: %v", err)
+	}
+	defer aiClient.Close()
+
+	// Initialize Validator
+	validatorInstance, err := validation.NewValidator(&config.AppConfig.ValidationService, config.Log)
+	if err != nil {
+		config.Log.Fatalf("Failed to initialize validator: %v", err)
+	}
+
+	// Create an instance of ApplicationHandler with all dependencies
+	appHandler := handlers.NewApplicationHandler(aiClient, config.Log, config.SupabaseClient, validatorInstance)
+
+	// Create Fiber app
 	app := fiber.New()
 
 	// Custom ErrorHandler
@@ -113,8 +134,7 @@ func main() {
 	// It's better to keep source video routes separate if they are not strictly dependent on a projectId for their core logic beyond initial upload.
 	// However, if a source video is always tied to a project contextually, this nesting is fine.
 	// For now, assuming source_videos always belong to a project:
-	projectsGroup.Post("/source-videos", handlers.InitiateVideoUpload)                   // POST /api/v1/projects/:projectId/source-videos
-	// projectsGroup.Get("/source-videos", handlers.ListSourceVideos)                     // GET /api/v1/projects/:projectId/source-videos
+	projectsGroup.Post("/source-videos", appHandler.InitiateVideoUpload) // projectsGroup.Get("/source-videos", handlers.ListSourceVideos)                     // GET /api/v1/projects/:projectId/source-videos
 	// projectsGroup.Get("/source-videos/:sourceVideoId", handlers.GetSourceVideo)         // GET /api/v1/projects/:projectId/source-videos/:sourceVideoId
 	// projectsGroup.Patch("/source-videos/:sourceVideoId", handlers.UpdateSourceVideo)     // PATCH /api/v1/projects/:projectId/source-videos/:sourceVideoId
 	// projectsGroup.Delete("/source-videos/:sourceVideoId", handlers.DeleteSourceVideo)   // DELETE /api/v1/projects/:projectId/source-videos/:sourceVideoId
@@ -128,8 +148,11 @@ func main() {
 	clipCaptions.Patch("/:captionId", handlers.UpdateCaption)  // Placeholder, using PATCH for consistency
 	clipCaptions.Delete("/:captionId", handlers.DeleteCaption) // Placeholder
 
+	// Trigger Transcription Route
+	projectsGroup.Post("/source-videos/:videoId/transcribe", appHandler.TriggerTranscription)
+
 	// Swagger UI route
-	// Note: The BasePath in the general annotations is /api/v1, 
+	// Note: The BasePath in the general annotations is /api/v1,
 	// so swagger will try to hit endpoints like /api/v1/projects, not /swagger/api/v1/projects
 	app.Get("/swagger/*", fiberSwagger.WrapHandler)
 

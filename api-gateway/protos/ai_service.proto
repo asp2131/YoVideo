@@ -22,7 +22,8 @@ message Highlight {
 // --- Transcription Service ---
 
 message TranscribeAudioRequest {
-    bytes audio_data = 1; // Raw audio bytes
+    // bytes audio_data = 1; // Raw audio bytes - Replaced by video_storage_path
+    string video_storage_path = 1; // e.g., "{project_id}/{video_uuid_with_extension}"
     string original_filename = 2; // e.g., "test.mp3"
 }
 
