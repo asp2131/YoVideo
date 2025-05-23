@@ -64,6 +64,7 @@ func main() {
 	videosGroup := projectsGroup.Group("/:projectId/videos") // Corrected: Use Group instead of Path
 	videosGroup.Post("/initiate-upload", appHandler.InitiateVideoUpload) // Uncommented: Initiate video upload
 	videosGroup.Post("/:videoId/trigger-transcription", appHandler.TriggerTranscription)
+	videosGroup.Get("/:videoId/transcription", appHandler.GetVideoTranscription) // Get video transcription
 
 	// --- Clip Routes (Example) ---
 	// clipsGroup := projectsGroup.Path("/:projectId/clips")

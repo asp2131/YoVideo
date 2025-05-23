@@ -1,8 +1,9 @@
 package aiclient
 
 import (
-	"log"
 	"context"
+	"fmt"
+	"log"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -56,25 +57,24 @@ func (c *AIClient) GetGRPCClient() aiservice.AIServiceClient {
 }
 
 // TranscribeAudio sends an audio transcription request to the AI service.
-// It now takes a videoStoragePath instead of raw audioData.
+// It sends the storage path of the video file to the AI service.
 func (c *AIClient) TranscribeAudio(ctx context.Context, videoStoragePath string, originalFilename string) (*aiservice.TranscribeAudioResponse, error) {
-	log.Printf("AIClient: Sending TranscribeAudio request for video path %s (original file: %s)", videoStoragePath, originalFilename)
+	log.Printf("AIClient: Sending transcription request for video path %s (original file: %s)", videoStoragePath, originalFilename)
+	
+	// Create the request with the video storage path
 	request := &aiservice.TranscribeAudioRequest{
-		// AudioData:        audioData, // Field removed from .proto
 		VideoStoragePath: videoStoragePath,
 		OriginalFilename: originalFilename,
 	}
 	
-	// Add a timeout to the context for the gRPC call
-	// ctx, cancel := context.WithTimeout(ctx, time.Second*30) // Example 30-second timeout
-	// defer cancel()
-
+	// Call the gRPC service
 	response, err := c.grpcClient.TranscribeAudio(ctx, request)
 	if err != nil {
 		log.Printf("AIClient: TranscribeAudio RPC failed for %s: %v", originalFilename, err)
-		return nil, err
+		return nil, fmt.Errorf("AI service error: %v", err)
 	}
-	log.Printf("AIClient: Received TranscribeAudio response for %s", originalFilename)
+	
+	log.Printf("AIClient: Successfully transcribed %s", originalFilename)
 	return response, nil
 }
 

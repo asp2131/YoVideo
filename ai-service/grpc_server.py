@@ -23,49 +23,132 @@ class AIServiceServicer(ai_service_pb2_grpc.AIServiceServicer):
     def TranscribeAudio(self, request: ai_service_pb2.TranscribeAudioRequest, context):
         logger.info(f"gRPC TranscribeAudio called for {request.original_filename}")
         if whisper_model is None:
-            context.abort(grpc.StatusCode.INTERNAL, "Whisper model is not available.")
+            error_msg = "Whisper model is not available."
+            logger.error(error_msg)
+            context.abort(grpc.StatusCode.INTERNAL, error_msg)
             return ai_service_pb2.TranscribeAudioResponse()
 
-        tmp_audio_file_path = None
+        import requests
+        from urllib.parse import urljoin
+        import subprocess
+        
+        tmp_video_path = None
+        tmp_audio_path = None
+        
         try:
-            # Create a temporary file to store the uploaded audio bytes
-            # Whisper needs a file path to process.
-            # Use a generic suffix if original_filename doesn't provide one, or handle it.
-            suffix = os.path.splitext(request.original_filename)[1] if request.original_filename else ".tmp"
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_audio_file:
-                tmp_audio_file.write(request.audio_data)
-                tmp_audio_file_path = tmp_audio_file.name
-            logger.info(f"Temporary audio file for gRPC saved at: {tmp_audio_file_path}")
-
-            # Transcribe the audio file
-            logger.info(f"Starting transcription for {tmp_audio_file_path} via gRPC...")
-            result = whisper_model.transcribe(tmp_audio_file_path, fp16=False) # fp16=False for CPU
-            logger.info(f"Transcription successful via gRPC. Processing segments...")
-
-            response_segments = []
-            for seg in result.get("segments", []):
-                response_segments.append(
-                    ai_service_pb2.TranscriptSegment(
-                        text=seg.get("text", ""),
-                        start_time=seg.get("start", 0.0),
-                        end_time=seg.get("end", 0.0)
-                    )
-                )
-            logger.info(f"Processed {len(response_segments)} segments for gRPC response.")
+            # Construct the full URL to the file in Supabase storage
+            supabase_url = "https://whwbduaefolbnfdrcfuo.supabase.co/storage/v1/object/public/source-videos/"
+            video_url = urljoin(supabase_url, request.video_storage_path)
             
-            return ai_service_pb2.TranscribeAudioResponse(
-                filename=request.original_filename,
-                segments=response_segments
-            )
+            logger.info(f"Downloading video from: {video_url}")
+            response = requests.get(video_url, stream=True)
+            response.raise_for_status()
+            
+            # Create a temporary file to store the video with a proper extension
+            suffix = os.path.splitext(request.original_filename)[1] if request.original_filename else ".mp4"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_video_file:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        tmp_video_file.write(chunk)
+                tmp_video_path = tmp_video_file.name
+                
+            logger.info(f"Temporary video file saved at: {tmp_video_path}")
+            
+            # Verify the file was downloaded correctly
+            if not os.path.exists(tmp_video_path) or os.path.getsize(tmp_video_path) == 0:
+                error_msg = f"Failed to download video file from {video_url} - file is empty or doesn't exist"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+                
+            file_size = os.path.getsize(tmp_video_path)
+            logger.info(f"Successfully downloaded {file_size} bytes")
+            
+            # Create a temporary file for the audio
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_audio_file:
+                tmp_audio_path = tmp_audio_file.name
+                
+            # Extract audio using ffmpeg
+            logger.info(f"Extracting audio from {tmp_video_path} to {tmp_audio_path}")
+            try:
+                ffmpeg_cmd = [
+                    'ffmpeg',
+                    '-y',  # Overwrite output file if it exists
+                    '-i', tmp_video_path,  # Input file
+                    '-vn',  # Disable video recording
+                    '-acodec', 'pcm_s16le',  # Audio codec
+                    '-ar', '16000',  # Audio sample rate
+                    '-ac', '1',  # Mono audio
+                    '-f', 'wav',  # Output format
+                    tmp_audio_path
+                ]
+                
+                result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+                if result.returncode != 0:
+                    error_msg = f"FFmpeg error: {result.stderr}"
+                    logger.error(error_msg)
+                    raise Exception(error_msg)
+                    
+                logger.info(f"Successfully extracted audio to {tmp_audio_path}")
+                
+            except Exception as e:
+                error_msg = f"Error extracting audio: {str(e)}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+            
+            # Verify the audio file was created and has content
+            if not os.path.exists(tmp_audio_path) or os.path.getsize(tmp_audio_path) == 0:
+                error_msg = "Failed to extract audio - output file is empty or doesn't exist"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+            
+            # Transcribe the audio file
+            logger.info(f"Starting transcription for {request.original_filename}")
+            try:
+                result = whisper_model.transcribe(tmp_audio_path, fp16=False)  # fp16=False for CPU
+                logger.info("Transcription completed successfully")
+                
+                response_segments = []
+                for seg in result.get("segments", []):
+                    segment_text = seg.get("text", "").strip()
+                    if segment_text:  # Only include non-empty segments
+                        response_segments.append(
+                            ai_service_pb2.TranscriptSegment(
+                                text=segment_text,
+                                start_time=seg.get("start", 0.0),
+                                end_time=seg.get("end", 0.0)
+                            )
+                        )
+                
+                logger.info(f"Processed {len(response_segments)} non-empty segments")
+                
+                if not response_segments:
+                    logger.warning("No transcription segments were generated. This might indicate an issue with the audio.")
+                
+                return ai_service_pb2.TranscribeAudioResponse(
+                    filename=request.original_filename,
+                    segments=response_segments
+                )
+                
+            except Exception as e:
+                error_msg = f"Error during transcription: {str(e)}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
 
         except Exception as e:
-            logger.error(f"Error during gRPC TranscribeAudio: {e}")
-            context.abort(grpc.StatusCode.INTERNAL, f"Error during transcription: {str(e)}")
-            return ai_service_pb2.TranscribeAudioResponse() # Should not be reached if abort works
+            error_msg = f"Error in TranscribeAudio: {str(e)}"
+            logger.error(error_msg)
+            context.abort(grpc.StatusCode.INTERNAL, error_msg)
+            return ai_service_pb2.TranscribeAudioResponse()
+            
         finally:
-            if tmp_audio_file_path and os.path.exists(tmp_audio_file_path):
-                os.remove(tmp_audio_file_path)
-                logger.info(f"Temporary audio file {tmp_audio_file_path} deleted.")
+            # Clean up temporary files
+            for file_path in [tmp_video_path, tmp_audio_path]:
+                if file_path and os.path.exists(file_path):
+                    try:
+                        os.remove(file_path)
+                        logger.info(f"Deleted temporary file: {file_path}")
+                    except Exception as e:
+                        logger.warning(f"Failed to delete temporary file {file_path}: {str(e)}")
 
     def DetectHighlights(self, request: ai_service_pb2.DetectHighlightsRequest, context):
         logger.info(f"gRPC DetectHighlights called with {len(request.segments)} segments.")

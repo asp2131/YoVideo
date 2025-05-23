@@ -314,6 +314,80 @@ func (h *ApplicationHandler) getSourceVideoByIDAndProjectID(ctx context.Context,
 	return &video, nil
 }
 
+// GetVideoTranscription retrieves the transcription for a specific video
+func (h *ApplicationHandler) GetVideoTranscription(c *fiber.Ctx) error {
+	projectIDStr := c.Params("projectId")
+	videoIDStr := c.Params("videoId")
+
+	projectID, err := uuid.Parse(projectIDStr)
+	if err != nil {
+		h.Logger.Errorf("Invalid projectId format: %s, error: %v", projectIDStr, err)
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": fmt.Sprintf("Invalid project ID format: %v", err),
+		})
+	}
+
+	videoID, err := uuid.Parse(videoIDStr)
+	if err != nil {
+		h.Logger.Errorf("Invalid videoId format: %s, error: %v", videoIDStr, err)
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": fmt.Sprintf("Invalid video ID format: %v", err),
+		})
+	}
+
+	h.Logger.Infof("Fetching transcription for ProjectID: %s, VideoID: %s", projectID.String(), videoID.String())
+
+	// Fetch the video details
+	video, err := h.getSourceVideoByIDAndProjectID(c.Context(), videoID, projectID)
+	if err != nil {
+		if err == ErrRecordNotFound {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"status":  "error",
+				"message": "Video not found",
+			})
+		}
+		h.Logger.Errorf("Error fetching video details: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Failed to fetch video details",
+		})
+	}
+
+	// Check if transcription exists
+	if video.TranscriptionStatus == nil || *video.TranscriptionStatus != "transcription_completed" {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"status":  "not_found",
+			"message": "Transcription not available or not completed",
+		})
+	}
+
+	// Unmarshal the transcription data
+	var transcriptionText string
+	if len(video.Transcription) > 0 {
+		// The transcription is stored as a JSON-encoded string, so we need to unmarshal it
+		if err := json.Unmarshal(video.Transcription, &transcriptionText); err != nil {
+			h.Logger.Errorf("Error unmarshaling transcription data: %v", err)
+			transcriptionText = "Error: Could not decode transcription"
+		}
+	}
+
+	// Return the transcription data
+	return c.JSON(fiber.Map{
+		"status":  "success",
+		"message": "Transcription retrieved successfully",
+		"data": fiber.Map{
+			"video_id":      video.ID,
+			"title":         video.Title,
+			"status":        video.TranscriptionStatus,
+			"transcription": transcriptionText,
+			"created_at":    video.CreatedAt,
+			"updated_at":    video.UpdatedAt,
+		},
+	})
+}
+
 // updateVideoTranscriptionDetails updates the transcription status, data, and error message for a video.
 func (h *ApplicationHandler) updateVideoTranscriptionDetails(ctx context.Context, videoID uuid.UUID, transcriptionStatus string, transcriptionData json.RawMessage, errorMessage string) error {
 	updates := make(map[string]interface{})
