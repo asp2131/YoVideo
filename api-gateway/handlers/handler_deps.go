@@ -1,26 +1,36 @@
 package handlers
 
 import (
-	aiclient "videothingy/api-gateway/internal/aiclient"
-	"github.com/nedpals/postgrest-go/v2"
+	"context"
+
+	supa "github.com/supabase-community/supabase-go"
 	"github.com/sirupsen/logrus"
+
+	// Import the generated gRPC client code for response/request types if needed by the interface
+	aiservice "videothingy/api-gateway/internal/goclient/aiservice"
 )
 
-// ApplicationHandler holds shared dependencies for HTTP handlers.
-// This makes it easy to pass dependencies like database connections, gRPC clients,
-// loggers, etc., to your handler functions in a structured and testable way.
+// AIClientInterface defines the operations handlers expect from an AI client.
+// This allows for decoupling and easier testing.
+// The concrete implementation will be provided by the aiclient package.
+type AIClientInterface interface {
+	TranscribeAudio(ctx context.Context, videoStoragePath string, originalFilename string) (*aiservice.TranscribeAudioResponse, error)
+	Close() error
+}
+
+// ApplicationHandler holds shared dependencies for handlers.
 type ApplicationHandler struct {
-	AIClient *aiclient.AIClient
-	Logger   *logrus.Logger // Use the actual type from the logrus package
-	DB       *postgrest.Client
+	AIClient   AIClientInterface // Use the interface
+	Logger     *logrus.Logger
+	DB         *supa.Client
 	// Supabase *supabase.Client // Example: if you pass Supabase client directly
 }
 
 // NewApplicationHandler creates a new ApplicationHandler with the given dependencies.
-func NewApplicationHandler(aiClient *aiclient.AIClient, logger *logrus.Logger, dbClient *postgrest.Client) *ApplicationHandler {
+func NewApplicationHandler(aiClient AIClientInterface, logger *logrus.Logger, dbClient *supa.Client) *ApplicationHandler {
 	return &ApplicationHandler{
-		AIClient: aiClient,
-		Logger:   logger,
-		DB:       dbClient,
+		AIClient:   aiClient,
+		Logger:     logger,
+		DB:         dbClient,
 	}
 }

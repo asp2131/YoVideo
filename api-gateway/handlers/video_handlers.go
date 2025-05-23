@@ -3,20 +3,23 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"videothingy/api-gateway/config"
-	"videothingy/api-gateway/models"
-
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
-	"github.com/lib/pq"
-	"gorm.io/gorm"
+	"github.com/sirupsen/logrus"
+
+	"videothingy/api-gateway/config"
+	"videothingy/api-gateway/models"
 )
+
+// ErrRecordNotFound is returned when a database record is not found.
+var ErrRecordNotFound = errors.New("record not found")
 
 // InitiateUploadRequest defines the expected JSON structure for initiating a video upload.
 type InitiateUploadRequest struct {
@@ -120,6 +123,7 @@ func (h *ApplicationHandler) InitiateVideoUpload(c *fiber.Ctx) error {
 	// Use CreateSignedUploadURL for generating a URL to upload a new file.
 	// func (c *Client) CreateSignedUploadURL(bucketID string, path string) (SignedUploadURLResponse, error)
 	// Corrected based on linter: method is CreateSignedUploadUrl (lowercase 'u')
+	h.Logger.Infof("Generating signed upload URL for bucket '%s', path '%s'...", supabaseBucketName, storagePath)
 	signedUploadURLResponse, err := config.SupabaseClient.Storage.CreateSignedUploadUrl(supabaseBucketName, storagePath)
 	if err != nil {
 		h.Logger.Errorf("Error generating signed upload URL for bucket '%s', path '%s': %v", supabaseBucketName, storagePath, err)
@@ -134,6 +138,7 @@ func (h *ApplicationHandler) InitiateVideoUpload(c *fiber.Ctx) error {
 			"message": fmt.Sprintf("Could not generate upload URL: %v", err),
 		})
 	}
+	h.Logger.Infof("Successfully generated signed upload URL: %s", signedUploadURLResponse.Url)
 
 	h.Logger.Infof("Successfully initiated upload for source video ID %s. Upload URL: %s", newSourceVideoID, signedUploadURLResponse.Url)
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
@@ -169,12 +174,12 @@ func (h *ApplicationHandler) deleteSourceVideoRecordOnError(videoID uuid.UUID) e
 
 // TriggerTranscription handles the request to start transcription for a video.
 func (h *ApplicationHandler) TriggerTranscription(c *fiber.Ctx) error {
-	projectIDStr := c.Params("project_id")
-	videoIDStr := c.Params("video_id")
+	projectIDStr := c.Params("projectId") // Corrected: camelCase to match route
+	videoIDStr := c.Params("videoId")     // Corrected: camelCase to match route
 
 	projectID, err := uuid.Parse(projectIDStr)
 	if err != nil {
-		h.Logger.Errorf("Invalid project_id format: %s, error: %v", projectIDStr, err)
+		h.Logger.Errorf("Invalid projectId format: %s, error: %v", projectIDStr, err) // Log corrected param name
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"status":  "error",
 			"message": fmt.Sprintf("Invalid project ID format: %v", err),
@@ -183,7 +188,7 @@ func (h *ApplicationHandler) TriggerTranscription(c *fiber.Ctx) error {
 
 	videoID, err := uuid.Parse(videoIDStr)
 	if err != nil {
-		h.Logger.Errorf("Invalid video_id format: %s, error: %v", videoIDStr, err)
+		h.Logger.Errorf("Invalid videoId format: %s, error: %v", videoIDStr, err) // Log corrected param name
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"status":  "error",
 			"message": fmt.Sprintf("Invalid video ID format: %v", err),
@@ -195,7 +200,7 @@ func (h *ApplicationHandler) TriggerTranscription(c *fiber.Ctx) error {
 	// --- 1. Fetch SourceVideo Details --- 
 	video, err := h.getSourceVideoByIDAndProjectID(c.Context(), videoID, projectID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) { // Assuming gorm.ErrRecordNotFound or similar for your DB client
+		if err == ErrRecordNotFound { 
 			h.Logger.Warnf("Video not found for ProjectID: %s, VideoID: %s", projectID.String(), videoID.String())
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"status":  "error",
@@ -223,46 +228,60 @@ func (h *ApplicationHandler) TriggerTranscription(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(c.Context(), 120*time.Second) // 120-second timeout for transcription call
 	defer cancel()
 
-	h.Logger.Infof("Calling AIClient.TranscribeAudio for storage path: %s, original filename (from title): %s", video.StoragePath, video.Title)
-
-	transcriptionResp, err := h.AIClient.TranscribeAudio(ctx, video.StoragePath, video.Title) // Use video.Title as originalFilename
+	// The AIClient's TranscribeAudio method will construct the necessary gRPC request.
+	// We pass the audio URL and a filename/identifier.
+	// Using video.Title as originalFilename for now, ensure this is appropriate.
+	transcriptionResp, err := h.AIClient.TranscribeAudio(ctx, video.StoragePath, video.Title)
 	if err != nil {
-		h.Logger.Errorf("AIClient.TranscribeAudio failed for VideoID %s: %v", videoID.String(), err)
-		updateErr := h.updateVideoTranscriptionDetails(c.Context(), videoID, "transcription_failed", nil, err.Error())
-		if updateErr != nil {
-			h.Logger.Errorf("Failed to update video status to transcription_failed for VideoID %s: %v", videoID.String(), updateErr)
+		h.Logger.WithFields(logrus.Fields{
+			"videoID":   videoID,
+			"projectID": projectID,
+			"audioURL":  video.StoragePath,
+			"error":     err.Error(),
+		}).Error("AI service TranscribeAudio call failed")
+		// Update video status to indicate transcription failure
+		// Assuming updateVideoTranscriptionDetails handles setting status and error message
+		if updateErr := h.updateVideoTranscriptionDetails(c.Context(), videoID, "transcription_failed", nil, err.Error()); updateErr != nil {
+			h.Logger.WithError(updateErr).Error("Failed to update video status to failed after AI error")
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"status":  "error",
-			"message": fmt.Sprintf("Transcription service call failed: %v", err),
-		})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to transcribe video: AI service error"})
 	}
 
-	h.Logger.Infof("AIClient.TranscribeAudio successful for VideoID %s. Transcript length: %d, Segments: %d",
-		videoID.String(), len(transcriptionResp.FullTranscript), len(transcriptionResp.Segments))
-
-	// --- 3. Update Video Status and Transcription Data in DB ---
-	rawTranscriptionData, marshalErr := json.Marshal(transcriptionResp) // Or directly use transcriptionResp if your model field matches
-	if marshalErr != nil {
-		h.Logger.Errorf("Failed to marshal transcription response for VideoID %s: %v", videoID.String(), marshalErr)
-		// Still try to update status to failed, but log this marshalling error
-		updateErr := h.updateVideoTranscriptionDetails(c.Context(), videoID, "transcription_failed", nil, fmt.Sprintf("Failed to process transcription data: %v", marshalErr))
-		if updateErr != nil {
-			h.Logger.Errorf("Additionally failed to update video status after marshalling error for VideoID %s: %v", videoID.String(), updateErr)
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Failed to process transcription data",
-		})
+	// Assemble the full transcript from segments
+	var fullTranscriptText string
+	for _, segment := range transcriptionResp.Segments {
+		fullTranscriptText += segment.Text + " " // Add a space between segments
+	}
+	// Trim trailing space if any
+	if len(fullTranscriptText) > 0 {
+		fullTranscriptText = fullTranscriptText[:len(fullTranscriptText)-1]
 	}
 
-	err = h.updateVideoTranscriptionDetails(c.Context(), videoID, "transcription_completed", rawTranscriptionData, "")
+	h.Logger.WithFields(logrus.Fields{
+		"videoID":   videoID,
+		"projectID": projectID,
+		"transcriptLength": len(fullTranscriptText),
+	}).Info("Video transcribed successfully by AI service")
+
+	// Update video status to completed and store the transcript
+	// Marshal the full transcript text to JSON RawMessage for storing, or adapt the DB model
+	transcriptJSON, err := json.Marshal(fullTranscriptText)
 	if err != nil {
-		h.Logger.Errorf("Failed to update video with transcription data for VideoID %s: %v", videoID.String(), err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Failed to save transcription results",
-		})
+		h.Logger.WithFields(logrus.Fields{
+			"videoID":   videoID,
+			"projectID": projectID,
+			"error":     err.Error(),
+		}).Error("Failed to marshal full transcript text for DB storage")
+		// Even if marshalling fails, try to mark as completed but with an error note or empty transcript
+		if updateErr := h.updateVideoTranscriptionDetails(c.Context(), videoID, "transcription_completed", nil, "Error marshalling transcript"); updateErr != nil {
+			h.Logger.WithError(updateErr).Error("Failed to update video status after transcript marshalling error")
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to process transcript for storage"})
+	}
+
+	if err := h.updateVideoTranscriptionDetails(c.Context(), videoID, "transcription_completed", transcriptJSON, ""); err != nil {
+		h.Logger.WithError(err).Error("Failed to update video status to complete and store transcript")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update video status after transcription"})
 	}
 
 	h.Logger.Infof("Successfully initiated and recorded transcription for VideoID: %s", videoID.String())
@@ -290,11 +309,7 @@ func (h *ApplicationHandler) getSourceVideoByIDAndProjectID(ctx context.Context,
 	if err != nil {
 		// Check for specific PostgREST error for not found, e.g., if err contains "PGRST116"
 		// For now, a generic error check. This needs refinement based on postgrest-go error handling.
-		if strings.Contains(err.Error(), "PGRST116") { // PGRST116: The result contains 0 rows
-			return nil, gorm.ErrRecordNotFound // Using gorm.ErrRecordNotFound as a conventional not found error
-		}
-		h.Logger.Errorf("DB error in getSourceVideoByIDAndProjectID for VideoID %s, ProjectID %s: %v", videoID, projectID, err)
-		return nil, fmt.Errorf("database query failed: %w", err)
+		return nil, ErrRecordNotFound // Using ErrRecordNotFound as a conventional not found error
 	}
 	return &video, nil
 }
@@ -331,7 +346,7 @@ func (h *ApplicationHandler) updateVideoTranscriptionDetails(ctx context.Context
 	}
 	if count == 0 {
 		h.Logger.Warnf("No rows updated in updateVideoTranscriptionDetails for VideoID %s. Video might not exist or match criteria.", videoID)
-		return gorm.ErrRecordNotFound // Or a more specific error indicating update target not found
+		return ErrRecordNotFound // Or a more specific error indicating update target not found
 	}
 
 	h.Logger.Infof("Successfully updated transcription details for VideoID %s. Status: %s", videoID, transcriptionStatus)
