@@ -139,15 +139,30 @@ func (h *ApplicationHandler) InitiateVideoUpload(c *fiber.Ctx) error {
 			"message": fmt.Sprintf("Could not generate upload URL: %v", err),
 		})
 	}
-	h.Logger.Infof("Successfully generated signed upload URL: %s", signedUploadURLResponse.Url)
+	// Ensure the URL is absolute
+	uploadURL := signedUploadURLResponse.Url
+	if !strings.HasPrefix(uploadURL, "http") {
+		// If the URL doesn't start with http or https, it's a relative URL
+		// Prepend the Supabase URL to make it absolute
+		supabaseURL := config.GetSupabaseURL()
+		if strings.HasPrefix(uploadURL, "/") {
+			// If it starts with /, just append to the base URL
+			uploadURL = supabaseURL + uploadURL
+		} else {
+			// Otherwise, add a / between the base URL and the path
+			uploadURL = supabaseURL + "/" + uploadURL
+		}
+	}
 
-	h.Logger.Infof("Successfully initiated upload for source video ID %s. Upload URL: %s", newSourceVideoID, signedUploadURLResponse.Url)
+	h.Logger.Infof("Successfully generated signed upload URL: %s", uploadURL)
+
+	h.Logger.Infof("Successfully initiated upload for source video ID %s. Upload URL: %s", newSourceVideoID, uploadURL)
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"status":  "success",
 		"message": "Video upload initiated successfully",
 		"data": fiber.Map{
 			"source_video_id": newSourceVideoID,
-			"upload_url":      signedUploadURLResponse.Url, // The URL client will use to PUT the file
+			"upload_url":      uploadURL, // The URL client will use to PUT the file
 			"method":          "PUT",
 			"storage_path":    storagePath, // The eventual path in Supabase storage (relative to bucket)
 			"headers": fiber.Map{ // Client should use these headers for the PUT request to the upload_url

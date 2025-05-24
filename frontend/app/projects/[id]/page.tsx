@@ -2,17 +2,18 @@
 
 import MainLayout from '../../../components/layout/MainLayout';
 import Link from 'next/link';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, use } from 'react';
 import { projectsApi, videosApi, Project, Video, Highlight } from '../../../utils/api';
 
 interface ProjectDetailPageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
-export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
-  const { id } = params;
+export default function ProjectDetailPage(props: ProjectDetailPageProps) {
+  const resolvedParams = use(props.params);
+  const { id } = resolvedParams;
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // State for project and videos
@@ -95,7 +96,7 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageProps) {
       });
       
       // Step 2: Upload file to storage
-      await videosApi.uploadFile(uploadData.upload_url, file, file.type);
+      await videosApi.uploadFile(uploadData.upload_url, file, id, uploadData.source_video_id);
       
       // Step 3: Trigger transcription
       await videosApi.triggerTranscription(id, uploadData.source_video_id, {

@@ -34,14 +34,16 @@ func main() {
 	// Create a new Fiber app instance with custom error handling
 	app := fiber.New(fiber.Config{
 		// ErrorHandler: utils.CustomErrorHandler, // Removed custom error handler for now
+		BodyLimit: 100 * 1024 * 1024, // 100 MB limit
 	})
 
 	// Middleware
 	app.Use(recover.New()) // Recovers from panics anywhere in the stack chain
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*", // Allow all origins for now, restrict in production
-		AllowMethods: "GET,POST,HEAD,PUT,DELETE,PATCH,OPTIONS",
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
+		AllowOrigins:     "http://localhost:3000", // Specify frontend origin
+		AllowMethods:     "GET,POST,HEAD,PUT,DELETE,PATCH,OPTIONS",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+		AllowCredentials: true,
 	}))
 	app.Use(middleware.RequestLogger()) // Corrected: No arguments needed
 
@@ -64,6 +66,7 @@ func main() {
 	videosGroup := projectsGroup.Group("/:projectId/videos") // Corrected: Use Group instead of Path
 	videosGroup.Get("/", appHandler.ListVideos) // List all videos for a project
 	videosGroup.Post("/initiate-upload", appHandler.InitiateVideoUpload) // Uncommented: Initiate video upload
+	videosGroup.Post("/:videoId/upload", appHandler.UploadFileHandler) // Direct upload endpoint to avoid CORS issues
 	videosGroup.Post("/:videoId/trigger-transcription", appHandler.TriggerTranscription)
 	videosGroup.Get("/:videoId/transcription", appHandler.GetVideoTranscription) // Get video transcription
 	videosGroup.Get("/:videoId/highlights", appHandler.DetectVideoHighlights) // Detect video highlights

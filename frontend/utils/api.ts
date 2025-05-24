@@ -133,15 +133,32 @@ export const videosApi = {
     return data.data;
   },
 
-  // Upload video file to storage
-  uploadFile: async (uploadUrl: string, file: File, contentType: string): Promise<void> => {
-    const response = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': contentType,
-      },
-      body: file,
+  // Upload video file to storage through our API Gateway to avoid CORS issues
+  uploadFile: async (uploadUrl: string, file: File, projectId?: string, videoId?: string): Promise<void> => {
+    // If projectId and videoId are not provided, try to extract them from the upload URL
+    // This is for backward compatibility
+    if (!projectId || !videoId) {
+      const urlParts = uploadUrl.split('/');
+      videoId = urlParts[urlParts.length - 2]; // Get the video ID from the URL
+      
+      // We don't want to use 'source-videos' as the projectId
+      // Instead, use the actual project ID from the context
+      // For now, we'll extract it from the URL, but this should be provided directly
+      projectId = urlParts[urlParts.length - 4]; // Get the project ID from the URL
+    }
+    
+    // Create a FormData object to send the file
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    console.log(`Uploading file to API Gateway for project ${projectId}, video ${videoId}`);
+    
+    // Use our API Gateway endpoint instead of direct Supabase storage
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/videos/${videoId}/upload`, {
+      method: 'POST',
+      body: formData,
     });
+    
     if (!response.ok) {
       throw new Error(`Failed to upload file: ${response.statusText}`);
     }

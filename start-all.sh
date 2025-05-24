@@ -63,6 +63,11 @@ sleep 3
 # Start the API Gateway (Go)
 echo -e "${GREEN}Starting API Gateway (Go)...${NC}"
 cd api-gateway
+
+# Set Supabase environment variables
+export SUPABASE_URL="https://whwbduaefolbnfdrcfuo.supabase.co"
+export SUPABASE_SERVICE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indod2JkdWFlZm9sYm5mZHJjZnVvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NzE1NTYzNCwiZXhwIjoyMDYyNzMxNjM0fQ.Vu3Qy2YMJGgVpnwQDRDDXlMxNTZXZvA0qYEbGzPOYcw"
+
 go run main.go > ../logs/api-gateway.log 2>&1 &
 API_PID=$!
 cd ..

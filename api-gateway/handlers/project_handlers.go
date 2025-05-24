@@ -141,9 +141,12 @@ func GetProjects(c *fiber.Ctx) error {
 
 	var projects []models.Project
 
+	// Use the Supabase client with the service key
+	supabaseClient := config.GetSupabaseClient()
+	
 	// Select all columns from the projects table
 	// Execute() returns (body []byte, count int64, error)
-	body, _, err := config.SupabaseClient.From("projects").Select("*", "", false).Execute()
+	body, _, err := supabaseClient.From("projects").Select("*", "", false).Execute()
 	if err != nil {
 		log.Printf("Error fetching projects from Supabase: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
