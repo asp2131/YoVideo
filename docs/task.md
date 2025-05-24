@@ -68,17 +68,17 @@
 |----|------|-------|
 | A-1 | Set up FastAPI service with model loading | 🟢 |
 | A-2 | Implement Whisper for transcription | 🟢 |
-| A-3 | Create highlight detection service | 🔵 |
+| A-3 | Create highlight detection service | 🟢 |
 <!-- | A-4 | Build virality score prediction | 🔵 | -->
 <!-- | A-5 | Implement B-roll suggestion service | 🔵 | -->
 | A-6 | Create caption formatting optimization | 🟢 |
-| A-7 | Build gRPC interface for Go service communication | 🔵 |
+| A-7 | Build gRPC interface for Go service communication | 🟢 |
 | A-8 | Implement batch processing for efficiency | 🔵 |
-| A-9 | Connect the frontend to the API gateway | 🔵 |
-| A-10 | Connect the API gateway to the AI service | 🔵 |
+| A-9 | Connect the frontend to the API gateway | 🟢 |
+| A-10 | Connect the API gateway to the AI service | 🟢 |
 | A-11 | Implement gRPC server for AI service | 🟢 |
-| A-12 | Implement gRPC client for Go service | 🔵 |
-| A-13 | Make sure everything is connected and works for MVP | 🔵 |
+| A-12 | Implement gRPC client for Go service | 🟢 |
+| A-13 | Make sure everything is connected and works for MVP | 🟢 |
 | A-14 | Implement model caching for performance | 🔵 |
 | A-15 | Create fallback mechanisms for model failures | 🔵 |
 | A-16 | Add error handling and logging | 🔵 |

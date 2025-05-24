@@ -1,15 +1,20 @@
+"use client";
+
 import MainLayout from '../components/layout/MainLayout';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { projectsApi, Project } from '../utils/api';
 
 interface ProjectCardProps {
   id: string;
   title: string;
   date: string;
   thumbnailUrl: string;
+  onDelete: () => void;
 }
 
-function ProjectCard({ id, title, date, thumbnailUrl }: ProjectCardProps) {
+function ProjectCard({ id, title, date, thumbnailUrl, onDelete }: ProjectCardProps) {
   return (
     <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow">
       <div className="relative h-40 bg-gray-100">
@@ -35,7 +40,13 @@ function ProjectCard({ id, title, date, thumbnailUrl }: ProjectCardProps) {
           <Link href={`/projects/${id}`} className="text-blue-600 hover:text-blue-800 text-sm font-medium">
             Edit Project
           </Link>
-          <button className="text-red-600 hover:text-red-800 text-sm font-medium">
+          <button 
+            onClick={(e) => {
+              e.preventDefault();
+              onDelete();
+            }} 
+            className="text-red-600 hover:text-red-800 text-sm font-medium"
+          >
             Delete
           </button>
         </div>
@@ -45,35 +56,130 @@ function ProjectCard({ id, title, date, thumbnailUrl }: ProjectCardProps) {
 }
 
 export default function Home() {
-  // Sample project data - in a real app, this would come from an API
-  const projects = [
-    { id: '1', title: 'Social Media Promo', date: 'May 18, 2025', thumbnailUrl: '' },
-    { id: '2', title: 'Product Demo', date: 'May 15, 2025', thumbnailUrl: '' },
-    { id: '3', title: 'Tutorial Video', date: 'May 10, 2025', thumbnailUrl: '' },
-  ];
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newProjectTitle, setNewProjectTitle] = useState('');
+
+  // Fetch projects from API
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        setLoading(true);
+        const data = await projectsApi.getProjects();
+        setProjects(data);
+        setError(null);
+      } catch (err) {
+        console.error('Failed to fetch projects:', err);
+        setError('Failed to load projects. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProjects();
+  }, []);
+
+  // Handle creating a new project
+  const handleCreateProject = async () => {
+    if (!newProjectTitle.trim()) return;
+    
+    try {
+      setIsCreating(true);
+      const newProject = await projectsApi.createProject({
+        title: newProjectTitle,
+      });
+      setProjects([...projects, newProject]);
+      setNewProjectTitle('');
+      setIsCreating(false);
+    } catch (err) {
+      console.error('Failed to create project:', err);
+      setError('Failed to create project. Please try again.');
+      setIsCreating(false);
+    }
+  };
+
+  // Handle deleting a project
+  const handleDeleteProject = async (projectId: string) => {
+    if (!confirm('Are you sure you want to delete this project?')) return;
+    
+    try {
+      await projectsApi.deleteProject(projectId);
+      setProjects(projects.filter(p => p.id !== projectId));
+    } catch (err) {
+      console.error('Failed to delete project:', err);
+      setError('Failed to delete project. Please try again.');
+    }
+  };
 
   return (
     <MainLayout>
       <div className="py-8">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-2xl font-bold text-gray-900">My Projects</h1>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg flex items-center">
+          <button 
+            onClick={() => setIsCreating(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg flex items-center"
+          >
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
             </svg>
             New Project
           </button>
         </div>
+        
+        {/* New Project Modal */}
+        {isCreating && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md">
+              <h2 className="text-xl font-bold mb-4">Create New Project</h2>
+              <input
+                type="text"
+                value={newProjectTitle}
+                onChange={(e) => setNewProjectTitle(e.target.value)}
+                placeholder="Project Title"
+                className="w-full p-2 border border-gray-300 rounded mb-4"
+              />
+              <div className="flex justify-end space-x-2">
+                <button 
+                  onClick={() => setIsCreating(false)}
+                  className="px-4 py-2 text-gray-700 hover:text-gray-900"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleCreateProject}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Create
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            {error}
+          </div>
+        )}
 
-        {projects.length > 0 ? (
+        {loading ? (
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+          </div>
+        ) : projects.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {projects.map((project) => (
               <ProjectCard 
                 key={project.id}
                 id={project.id}
                 title={project.title}
-                date={project.date}
-                thumbnailUrl={project.thumbnailUrl}
+                date={new Date(project.created_at).toLocaleDateString()}
+                thumbnailUrl=""
+                onDelete={() => handleDeleteProject(project.id)}
               />
             ))}
           </div>
