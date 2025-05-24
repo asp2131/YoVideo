@@ -48,6 +48,18 @@ echo -e "${GREEN}AI Service started with PID: $AI_PID${NC}"
 echo -e "${YELLOW}Waiting for AI Service to be ready...${NC}"
 sleep 5
 
+# Start the Video Processor (Go)
+echo -e "${GREEN}Starting Video Processor (Go)...${NC}"
+cd video-processor/cmd/processor
+go run main.go > ../../../logs/video-processor.log 2>&1 &
+VIDEO_PROCESSOR_PID=$!
+cd ../../..
+echo -e "${GREEN}Video Processor started with PID: $VIDEO_PROCESSOR_PID${NC}"
+
+# Wait for Video Processor to be ready
+echo -e "${YELLOW}Waiting for Video Processor to be ready...${NC}"
+sleep 3
+
 # Start the API Gateway (Go)
 echo -e "${GREEN}Starting API Gateway (Go)...${NC}"
 cd api-gateway
@@ -75,6 +87,7 @@ sleep 5
 echo -e "${GREEN}All services started successfully!${NC}"
 echo -e "${BLUE}=====================================${NC}"
 echo -e "${GREEN}AI Service:${NC} http://localhost:50051 (gRPC)"
+echo -e "${GREEN}Video Processor:${NC} Running as a background service"
 echo -e "${GREEN}API Gateway:${NC} http://localhost:8080"
 echo -e "${GREEN}Frontend:${NC} http://localhost:3000"
 echo -e "${BLUE}=====================================${NC}"
@@ -84,7 +97,7 @@ echo -e "${YELLOW}Press Ctrl+C to stop all services${NC}"
 # Function to kill all started processes
 cleanup() {
     echo -e "\n${YELLOW}Stopping all services...${NC}"
-    kill $AI_PID $API_PID $FRONTEND_PID 2>/dev/null
+    kill $AI_PID $VIDEO_PROCESSOR_PID $API_PID $FRONTEND_PID 2>/dev/null
     echo -e "${GREEN}All services stopped${NC}"
     exit 0
 }
