@@ -88,7 +88,7 @@ export default function Home() {
     try {
       setIsCreating(true);
       const newProject = await projectsApi.createProject({
-        title: newProjectTitle,
+        name: newProjectTitle,
       });
       setProjects([...projects, newProject]);
       setNewProjectTitle('');
@@ -176,7 +176,7 @@ export default function Home() {
               <ProjectCard 
                 key={project.id}
                 id={project.id}
-                title={project.title}
+                title={project.name || 'Untitled Project'}
                 date={new Date(project.created_at).toLocaleDateString()}
                 thumbnailUrl=""
                 onDelete={() => handleDeleteProject(project.id)}

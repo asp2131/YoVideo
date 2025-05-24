@@ -24,6 +24,16 @@ else
     echo -e "${GREEN}No AI Service running on port 50051${NC}"
 fi
 
+# The Video Processor doesn't have a specific port, so we'll try to find it by process name
+VIDEO_PROCESSOR_PID=$(ps aux | grep "[g]o run.*video-processor" | awk '{print $2}')
+if [ -n "$VIDEO_PROCESSOR_PID" ]; then
+    echo -e "${YELLOW}Stopping Video Processor with PID $VIDEO_PROCESSOR_PID${NC}"
+    kill $VIDEO_PROCESSOR_PID
+    echo -e "${GREEN}Video Processor stopped${NC}"
+else
+    echo -e "${GREEN}No Video Processor running${NC}"
+fi
+
 if lsof -i :3000 > /dev/null 2>&1; then
     echo -e "${YELLOW}Stopping Frontend on port 3000${NC}"
     kill $(lsof -ti:3000)

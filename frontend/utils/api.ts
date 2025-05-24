@@ -6,9 +6,11 @@ const API_BASE_URL = 'http://localhost:8080/api/v1';
 
 export interface Project {
   id: string;
-  title: string;
+  name: string;
   description?: string;
   created_at: string;
+  thumbnail_url?: string;
+  updated_at?: string;
 }
 
 export interface Video {
@@ -65,7 +67,7 @@ export const projectsApi = {
   },
 
   // Create a new project
-  createProject: async (projectData: { title: string; description?: string }): Promise<Project> => {
+  createProject: async (projectData: { name: string; description?: string }): Promise<Project> => {
     const response = await fetch(`${API_BASE_URL}/projects`, {
       method: 'POST',
       headers: {

@@ -52,16 +52,17 @@ func main() {
 	api := app.Group("/api")
 	v1 := api.Group("/v1")
 
-	// --- Project Routes (Example, assuming these handlers exist on ApplicationHandler) ---
+	// --- Project Routes ---
 	projectsGroup := v1.Group("/projects")
-	// projectsGroup.Post("/", appHandler.CreateProject) // Temporarily commented out to avoid undefined error
-	// projectsGroup.Get("/", appHandler.GetProjects)       // Commented out
-	// projectsGroup.Get("/:projectId", appHandler.GetProject) // Commented out
-	// projectsGroup.Patch("/:projectId", appHandler.UpdateProject) // Commented out
-	// projectsGroup.Delete("/:projectId", appHandler.DeleteProject) // Commented out
+	projectsGroup.Post("/", handlers.CreateProject) 
+	projectsGroup.Get("/", handlers.GetProjects)
+	projectsGroup.Get("/:id", handlers.GetProject) 
+	// projectsGroup.Patch("/:id", handlers.UpdateProject) // Commented out until implemented
+	projectsGroup.Delete("/:id", handlers.DeleteProject)
 
 	// --- Video Routes ---
 	videosGroup := projectsGroup.Group("/:projectId/videos") // Corrected: Use Group instead of Path
+	videosGroup.Get("/", appHandler.ListVideos) // List all videos for a project
 	videosGroup.Post("/initiate-upload", appHandler.InitiateVideoUpload) // Uncommented: Initiate video upload
 	videosGroup.Post("/:videoId/trigger-transcription", appHandler.TriggerTranscription)
 	videosGroup.Get("/:videoId/transcription", appHandler.GetVideoTranscription) // Get video transcription

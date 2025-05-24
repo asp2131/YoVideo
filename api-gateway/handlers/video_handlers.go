@@ -422,6 +422,56 @@ func (h *ApplicationHandler) updateVideoTranscriptionDetails(ctx context.Context
 	return nil
 }
 
+// ListVideos handles the request to list all videos for a specific project.
+// It returns a list of videos that belong to the specified project.
+func (h *ApplicationHandler) ListVideos(c *fiber.Ctx) error {
+	projectIDStr := c.Params("projectId")
+
+	h.Logger.Infof("Received request to list videos for project ID %s", projectIDStr)
+
+	projectID, err := uuid.Parse(projectIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "error", "message": "Invalid project ID format"})
+	}
+
+	// Check if the project exists
+	var projects []models.Project
+	body, _, err := h.DB.From("projects").Select("*", "", false).Eq("id", projectID.String()).Execute()
+	if err != nil {
+		h.Logger.Errorf("Error checking if project %s exists: %v", projectID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to check if project exists"})
+	}
+
+	if err := json.Unmarshal(body, &projects); err != nil {
+		h.Logger.Errorf("Error unmarshalling project data: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to process project data"})
+	}
+
+	if len(projects) == 0 {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"status": "error", "message": "Project not found"})
+	}
+
+	// Fetch all videos for the project
+	var videos []models.SourceVideo
+	body, _, err = h.DB.From("source_videos").Select("*", "", false).Eq("project_id", projectID.String()).Execute()
+	if err != nil {
+		h.Logger.Errorf("Error fetching videos for project %s: %v", projectID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to fetch videos"})
+	}
+
+	if err := json.Unmarshal(body, &videos); err != nil {
+		h.Logger.Errorf("Error unmarshalling videos data: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to process videos data"})
+	}
+
+	h.Logger.Infof("Successfully fetched %d videos for project %s", len(videos), projectID)
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status":  "success",
+		"message": "Videos retrieved successfully",
+		"data":    videos,
+	})
+}
+
 // DetectVideoHighlights handles the request to detect highlights from a video's transcription.
 // It fetches the transcription data, sends it to the AI service for highlight detection,
 // and returns the detected highlights.
