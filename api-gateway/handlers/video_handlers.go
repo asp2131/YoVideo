@@ -15,6 +15,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"videothingy/api-gateway/config"
+	"videothingy/api-gateway/internal/goclient/aiservice"
 	"videothingy/api-gateway/models"
 )
 
@@ -390,25 +391,19 @@ func (h *ApplicationHandler) GetVideoTranscription(c *fiber.Ctx) error {
 
 // updateVideoTranscriptionDetails updates the transcription status, data, and error message for a video.
 func (h *ApplicationHandler) updateVideoTranscriptionDetails(ctx context.Context, videoID uuid.UUID, transcriptionStatus string, transcriptionData json.RawMessage, errorMessage string) error {
-	updates := make(map[string]interface{})
-	now := time.Now()
+	updates := map[string]interface{}{
+		"transcription_status": transcriptionStatus,
+		"updated_at":           time.Now(),
+	}
 
-	updates["transcription_status"] = transcriptionStatus
-	updates["updated_at"] = now
-
-	if transcriptionData != nil && transcriptionStatus == "transcription_completed" {
-		updates["transcription"] = transcriptionData // This should be json.RawMessage or compatible
-		updates["error_message"] = nil // Clear previous errors if successful
-	} else {
-		// If not completed or data is nil, ensure transcription field isn't accidentally overwritten with nil if it shouldn't be.
-		// Depending on desired behavior, you might want to explicitly set it to nil or not include it in updates.
+	if transcriptionData != nil {
+		updates["transcription"] = transcriptionData
 	}
 
 	if errorMessage != "" {
 		updates["error_message"] = errorMessage
 	}
 
-	// Using h.DB which is *postgrest.Client
 	_, count, err := h.DB.From("source_videos").
 		Update(updates, "", "exact"). // Using "exact" to get a count of updated rows
 		Eq("id", videoID.String()).
@@ -425,4 +420,161 @@ func (h *ApplicationHandler) updateVideoTranscriptionDetails(ctx context.Context
 
 	h.Logger.Infof("Successfully updated transcription details for VideoID %s. Status: %s", videoID, transcriptionStatus)
 	return nil
+}
+
+// DetectVideoHighlights handles the request to detect highlights from a video's transcription.
+// It fetches the transcription data, sends it to the AI service for highlight detection,
+// and returns the detected highlights.
+func (h *ApplicationHandler) DetectVideoHighlights(c *fiber.Ctx) error {
+	projectIDStr := c.Params("projectId")
+	videoIDStr := c.Params("videoId")
+
+	h.Logger.Infof("Received request to detect highlights for video ID %s in project %s", videoIDStr, projectIDStr)
+
+	projectID, err := uuid.Parse(projectIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "error", "message": "Invalid project ID format"})
+	}
+
+	videoID, err := uuid.Parse(videoIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "error", "message": "Invalid video ID format"})
+	}
+
+	// Fetch the source video to ensure it exists and belongs to the project
+	video, err := h.getSourceVideoByIDAndProjectID(c.Context(), videoID, projectID)
+	if err != nil {
+		if errors.Is(err, ErrRecordNotFound) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"status": "error", "message": "Video not found or does not belong to the specified project"})
+		}
+		h.Logger.Errorf("Error fetching video %s for project %s: %v", videoID, projectID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to fetch video details"})
+	}
+
+	// Check if the video has been transcribed
+	if video.TranscriptionStatus == nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Video transcription status is not available",
+		})
+	}
+
+	// Check for various completed status formats (COMPLETED, completed, transcription_completed)
+	statusText := strings.ToLower(*video.TranscriptionStatus)
+	if !strings.Contains(statusText, "complete") {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status":  "error",
+			"message": fmt.Sprintf("Video transcription is not complete. Current status: %s", *video.TranscriptionStatus),
+		})
+	}
+
+	// Parse the transcription data
+	var segments []*aiservice.TranscriptSegment
+
+	// First try to parse as JSON
+	var transcriptionData models.TranscriptionData
+	if err := json.Unmarshal(video.Transcription, &transcriptionData); err != nil {
+		// If JSON parsing fails, check if it's a plain text string
+		transcriptionText := string(video.Transcription)
+		if len(transcriptionText) > 0 && transcriptionText[0] != '{' && transcriptionText[0] != '[' {
+			// It's a plain text string, create a single segment with the entire text
+			h.Logger.Infof("Using plain text transcription for video %s: %s", videoID, transcriptionText)
+			segments = append(segments, &aiservice.TranscriptSegment{
+				Text:      transcriptionText,
+				StartTime: 0.0,
+				EndTime:   60.0, // Assume 60 seconds if we don't know the actual duration
+			})
+		} else {
+			// It's not a plain text string and JSON parsing failed
+			h.Logger.Errorf("Error parsing transcription data for video %s: %v", videoID, err)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to parse transcription data"})
+		}
+	} else {
+		// JSON parsing succeeded, use the segments from the transcription data
+		for _, segment := range transcriptionData.Segments {
+			segments = append(segments, &aiservice.TranscriptSegment{
+				Text:      segment.Text,
+				StartTime: segment.StartTime,
+				EndTime:   segment.EndTime,
+			})
+		}
+	}
+
+	// Check if we have any segments to process
+	if len(segments) == 0 {
+		h.Logger.Warnf("No transcription segments found for video %s", videoID)
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "error", "message": "No transcription segments found"})
+	}
+
+	// Call the AI service to detect highlights
+	highlightsResponse, err := h.AIClient.DetectHighlights(c.Context(), segments)
+	if err != nil {
+		h.Logger.Errorf("Error detecting highlights for video %s: %v", videoID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to detect highlights"})
+	}
+
+	// Convert the highlights to a format suitable for the response
+	type HighlightResponse struct {
+		Text      string  `json:"text"`
+		StartTime float64 `json:"start_time"`
+		EndTime   float64 `json:"end_time"`
+		Score     float32 `json:"score"`
+	}
+
+	var highlightsResult []HighlightResponse
+	for _, highlight := range highlightsResponse.GetHighlights() {
+		highlightsResult = append(highlightsResult, HighlightResponse{
+			Text:      highlight.GetText(),
+			StartTime: highlight.GetStartTime(),
+			EndTime:   highlight.GetEndTime(),
+			Score:     highlight.GetScore(),
+		})
+	}
+
+	// Store the highlights in the database
+	highlightsData, err := json.Marshal(models.HighlightData{
+		Highlights: convertToModelHighlights(highlightsResponse.GetHighlights()),
+	})
+	if err != nil {
+		h.Logger.Errorf("Error marshaling highlights data for video %s: %v", videoID, err)
+		// Continue with the response even if storing fails
+	} else {
+		// Update the video record with the highlights data
+		updates := map[string]interface{}{
+			"highlight_markers": highlightsData,
+			"updated_at":        time.Now(),
+		}
+
+		_, count, err := h.DB.From("source_videos").
+			Update(updates, "", "exact").
+			Eq("id", videoID.String()).
+			Execute()
+
+		if err != nil {
+			h.Logger.Errorf("Error updating highlights for video %s: %v", videoID, err)
+			// Continue with the response even if storing fails
+		} else if count == 0 {
+			h.Logger.Warnf("No rows updated when saving highlights for video %s", videoID)
+		}
+	}
+
+	h.Logger.Infof("Successfully detected %d highlights for video %s", len(highlightsResult), videoID)
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status":     "success",
+		"highlights": highlightsResult,
+	})
+}
+
+// convertToModelHighlights converts aiservice.Highlight slice to models.Highlight slice
+func convertToModelHighlights(highlights []*aiservice.Highlight) []models.Highlight {
+	result := make([]models.Highlight, len(highlights))
+	for i, h := range highlights {
+		result[i] = models.Highlight{
+			Text:      h.GetText(),
+			StartTime: h.GetStartTime(),
+			EndTime:   h.GetEndTime(),
+			Score:     h.GetScore(),
+		}
+	}
+	return result
 }

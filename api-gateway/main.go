@@ -65,6 +65,7 @@ func main() {
 	videosGroup.Post("/initiate-upload", appHandler.InitiateVideoUpload) // Uncommented: Initiate video upload
 	videosGroup.Post("/:videoId/trigger-transcription", appHandler.TriggerTranscription)
 	videosGroup.Get("/:videoId/transcription", appHandler.GetVideoTranscription) // Get video transcription
+	videosGroup.Get("/:videoId/highlights", appHandler.DetectVideoHighlights) // Detect video highlights
 
 	// --- Clip Routes (Example) ---
 	// clipsGroup := projectsGroup.Path("/:projectId/clips")

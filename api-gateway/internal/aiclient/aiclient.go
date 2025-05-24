@@ -78,20 +78,46 @@ func (c *AIClient) TranscribeAudio(ctx context.Context, videoStoragePath string,
 	return response, nil
 }
 
-/*
-// Example for DetectHighlights
+// DetectHighlights sends a request to the AI service to detect highlights in the provided transcript segments.
+// It takes a slice of TranscriptSegment and returns a DetectHighlightsResponse with the detected highlights.
 func (c *AIClient) DetectHighlights(ctx context.Context, segments []*aiservice.TranscriptSegment) (*aiservice.DetectHighlightsResponse, error) {
-    request := &aiservice.DetectHighlightsRequest{Segments: segments}
-    return c.grpcClient.DetectHighlights(ctx, request)
+	log.Printf("AIClient: Sending highlight detection request for %d segments", len(segments))
+	
+	// Create the request with the transcript segments
+	request := &aiservice.DetectHighlightsRequest{
+		Segments: segments,
+	}
+	
+	// Call the gRPC service
+	response, err := c.grpcClient.DetectHighlights(ctx, request)
+	if err != nil {
+		log.Printf("AIClient: DetectHighlights RPC failed: %v", err)
+		return nil, fmt.Errorf("AI service error during highlight detection: %v", err)
+	}
+	
+	log.Printf("AIClient: Successfully detected %d highlights", len(response.GetHighlights()))
+	return response, nil
 }
 
-// Example for FormatCaptions
+// FormatCaptions sends a request to the AI service to format captions for the provided transcript segments.
+// It takes a slice of TranscriptSegment and formatting options, then returns a FormatCaptionsResponse with the formatted captions.
 func (c *AIClient) FormatCaptions(ctx context.Context, segments []*aiservice.TranscriptSegment, maxChars int32, maxLines int32) (*aiservice.FormatCaptionsResponse, error) {
+    log.Printf("AIClient: Sending caption formatting request for %d segments", len(segments))
+    
+    // Create the request with the transcript segments and formatting options
     request := &aiservice.FormatCaptionsRequest{
         Segments:           segments,
         MaxCharsPerLine:    maxChars,
         MaxLinesPerCaption: maxLines,
     }
-    return c.grpcClient.FormatCaptions(ctx, request)
+    
+    // Call the gRPC service
+    response, err := c.grpcClient.FormatCaptions(ctx, request)
+    if err != nil {
+        log.Printf("AIClient: FormatCaptions RPC failed: %v", err)
+        return nil, fmt.Errorf("AI service error during caption formatting: %v", err)
+    }
+    
+    log.Printf("AIClient: Successfully formatted captions (response length: %d chars)", len(response.GetSrtContent()))
+    return response, nil
 }
-*/
