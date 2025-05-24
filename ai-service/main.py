@@ -112,6 +112,7 @@ async def transcribe_audio(audio_file: UploadFile = File(...)):
     return TranscriptionResponse(filename=audio_file.filename, segments=processed_segments)
 
 # --- Highlight Detection Endpoint ---
+# Keywords that might indicate important content
 INTERESTING_KEYWORDS = [
     "important", "key", "remember", "secret", "amazing", "best part",
     "check out", "don't miss", "finally", "conclusion", "summary",
@@ -121,30 +122,84 @@ INTERESTING_KEYWORDS = [
     "believe it or not", "you won't believe", "insane", "crazy"
 ]
 
+# Action-oriented phrases that often indicate instructions or steps
+ACTION_PHRASES = [
+    "put", "take", "get", "use", "make", "create", "start", "begin", 
+    "first", "second", "third", "next", "then", "after", "before",
+    "step", "process", "method", "technique", "approach", "way to",
+    "add", "remove", "cut", "place", "position", "move", "shift",
+    "increase", "decrease", "reduce", "expand", "grow", "shrink",
+    "wait", "let", "allow", "enable", "disable", "turn on", "turn off"
+]
+
 @app.post("/detect-highlights", response_model=HighlightDetectionResponse)
 async def detect_highlights(request: HighlightDetectionRequest):
-    detected_highlights = []
-    min_score_to_include = 1 # Include segment if at least one keyword is found
-
+    if not request.segments:
+        return HighlightDetectionResponse(highlights=[])
+    
+    # Step 1: Identify the main topic by analyzing all segments together
+    all_text = " ".join([segment.text for segment in request.segments])
+    
+    # Step 2: Process each segment for highlighting
+    highlights_with_scores = []
+    
     for segment in request.segments:
         score = 0
         segment_text_lower = segment.text.lower()
+        
+        # Score based on traditional keywords
         for keyword in INTERESTING_KEYWORDS:
             if keyword.lower() in segment_text_lower:
                 score += 1
         
-        if score >= min_score_to_include:
+        # Score based on action phrases that indicate instructions or steps
+        for phrase in ACTION_PHRASES:
+            if phrase.lower() in segment_text_lower:
+                score += 0.5  # Give less weight to common action words
+        
+        # Score based on segment length (longer segments might contain more information)
+        # But not too long (rambling)
+        words = segment_text_lower.split()
+        if 10 <= len(words) <= 30:
+            score += 0.5
+        
+        # Score based on position in transcript (intro and conclusion often important)
+        if segment == request.segments[0] or segment == request.segments[-1]:
+            score += 0.5
+            
+        # Add segment to potential highlights with its score
+        highlights_with_scores.append({
+            "segment": segment,
+            "score": score
+        })
+    
+    # Step 3: Select the best highlights
+    # Sort by score (highest first)
+    highlights_with_scores.sort(key=lambda x: x["score"], reverse=True)
+    
+    # Take top segments or those with minimum score
+    min_score_to_include = 0.5  # Lower threshold to catch more potential highlights
+    detected_highlights = []
+    
+    # Always include at least 2 highlights if we have enough segments
+    min_highlights = min(2, len(request.segments))
+    
+    # Add top scoring segments
+    for item in highlights_with_scores:
+        if item["score"] >= min_score_to_include or len(detected_highlights) < min_highlights:
+            segment = item["segment"]
             detected_highlights.append(
-                Highlight(text=segment.text, start_time=segment.start_time, end_time=segment.end_time, score=float(score))
+                Highlight(
+                    text=segment.text, 
+                    start_time=segment.start_time, 
+                    end_time=segment.end_time, 
+                    score=float(item["score"])
+                )
             )
-
-    # Optional: Sort by score and take top N
-    # detected_highlights.sort(key=lambda h: h.score, reverse=True)
-    # detected_highlights = detected_highlights[:request.num_highlights] # if num_highlights is part of request
-
-    if not detected_highlights and request.segments: # If no keywords found, maybe return the longest segment or first few?
-        # For now, just return empty if no keywords trigger.
-        pass
+        
+        # Limit to reasonable number of highlights
+        if len(detected_highlights) >= 5:  # Cap at 5 highlights
+            break
 
     return HighlightDetectionResponse(highlights=detected_highlights)
 
