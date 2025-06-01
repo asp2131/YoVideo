@@ -14,7 +14,7 @@ import ai_service_pb2_grpc
 # We need the whisper_model and the Pydantic models for data conversion if necessary,
 # and potentially the core logic of highlight detection and caption formatting.
 # This might require some refactoring in main.py if imports cause issues (e.g., auto-starting FastAPI).
-from main import whisper_model, TranscriptSegment, HighlightDetectionRequest, Highlight, HighlightDetectionResponse, CaptionFormatRequest, CaptionFormatResponse, format_srt_time, break_text_into_lines, INTERESTING_KEYWORDS
+from main import whisper_model, TranscriptSegment, CaptionFormatRequest, CaptionFormatResponse, format_srt_time, break_text_into_lines
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -149,38 +149,6 @@ class AIServiceServicer(ai_service_pb2_grpc.AIServiceServicer):
                         logger.info(f"Deleted temporary file: {file_path}")
                     except Exception as e:
                         logger.warning(f"Failed to delete temporary file {file_path}: {str(e)}")
-
-    def DetectHighlights(self, request: ai_service_pb2.DetectHighlightsRequest, context):
-        logger.info(f"gRPC DetectHighlights called with {len(request.segments)} segments.")
-        detected_highlights_proto = []
-        min_score_to_include = 1 # As defined in main.py
-
-        # Convert protobuf segments to Pydantic TranscriptSegment for logic reuse (if any)
-        # Or directly iterate and apply logic
-        pydantic_segments = [
-            TranscriptSegment(text=s.text, start_time=s.start_time, end_time=s.end_time)
-            for s in request.segments
-        ]
-
-        for p_segment in pydantic_segments:
-            score = 0
-            segment_text_lower = p_segment.text.lower()
-            for keyword in INTERESTING_KEYWORDS:
-                if keyword.lower() in segment_text_lower:
-                    score += 1
-            
-            if score >= min_score_to_include:
-                detected_highlights_proto.append(
-                    ai_service_pb2.Highlight(
-                        text=p_segment.text,
-                        start_time=p_segment.start_time,
-                        end_time=p_segment.end_time,
-                        score=float(score)
-                    )
-                )
-        
-        logger.info(f"Detected {len(detected_highlights_proto)} highlights via gRPC.")
-        return ai_service_pb2.DetectHighlightsResponse(highlights=detected_highlights_proto)
 
     def FormatCaptions(self, request: ai_service_pb2.FormatCaptionsRequest, context):
         logger.info(f"gRPC FormatCaptions called with {len(request.segments)} segments.")

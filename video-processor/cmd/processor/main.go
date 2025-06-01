@@ -48,7 +48,9 @@ func main() {
 	// Define common input file
 	inputFile := "/Users/akinpound/Documents/experiments/videothingy/video-processor/internal/ffmpeg/test/test.mp4"
 
-	// --- Submit an ExtractClipJob ---
+	// --- REMOVED: ExtractClipJob submission ---
+	// We no longer support clip extraction as we're focusing on full video transcription and caption overlay
+	/*
 	outputClipFile := "/Users/akinpound/Documents/experiments/videothingy/video-processor/internal/ffmpeg/test/test_clip_from_job.mp4"
 
 	clipJob, err := jobs.NewExtractClipJob(
@@ -63,7 +65,7 @@ func main() {
 	}
 	dispatcher.SubmitJob(clipJob)
 	log.Printf("Submitted ExtractClipJob %s to dispatcher.", clipJob.ID())
-	// --- End Submit an ExtractClipJob ---
+	*/
 
 	// --- Submit a GetVideoMetadataJob ---
 	metadataJob := jobs.NewGetVideoMetadataJob(

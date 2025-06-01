@@ -19,7 +19,10 @@ export interface Video {
   title: string;
   description?: string;
   storage_path: string;
+  original_filename?: string;
   transcription_status?: string;
+  transcription?: string | TranscriptionData; // Changed from any to TranscriptionData
+  processed_video_path?: string;
   status: string;
   created_at: string;
   updated_at: string;
@@ -35,12 +38,6 @@ export interface TranscriptSegment {
   end_time: number;
 }
 
-export interface Highlight {
-  text: string;
-  start_time: number;
-  end_time: number;
-  score: number;
-}
 
 /**
  * Project API methods
@@ -188,13 +185,27 @@ export const videosApi = {
     return data.data;
   },
 
-  // Get video highlights
-  getHighlights: async (projectId: string, videoId: string): Promise<Highlight[]> => {
-    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/videos/${videoId}/highlights`);
+
+  // Process video with caption overlay
+  processCaptions: async (projectId: string, videoId: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/videos/${videoId}/process-captions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
     if (!response.ok) {
-      throw new Error(`Failed to fetch highlights: ${response.statusText}`);
+      throw new Error(`Failed to process captions: ${response.statusText}`);
+    }
+  },
+
+  // Get processed video with captions
+  getProcessedVideo: async (projectId: string, videoId: string): Promise<{ download_url: string }> => {
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/videos/${videoId}/processed`);
+    if (!response.ok) {
+      throw new Error(`Failed to get processed video: ${response.statusText}`);
     }
     const data = await response.json();
-    return data.highlights || [];
+    return data.data;
   },
 };

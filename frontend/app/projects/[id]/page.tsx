@@ -3,7 +3,7 @@
 import MainLayout from '../../../components/layout/MainLayout';
 import Link from 'next/link';
 import { useEffect, useState, useRef, use } from 'react';
-import { projectsApi, videosApi, Project, Video, Highlight } from '../../../utils/api';
+import { projectsApi, videosApi, Project, Video } from '../../../utils/api';
 
 interface ProjectDetailPageProps {
   params: Promise<{
@@ -20,7 +20,6 @@ export default function ProjectDetailPage(props: ProjectDetailPageProps) {
   const [project, setProject] = useState<Project | null>(null);
   const [videos, setVideos] = useState<Video[]>([]);
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
-  const [highlights, setHighlights] = useState<Highlight[]>([]);
   
   // UI state
   const [loading, setLoading] = useState(true);
@@ -58,27 +57,6 @@ export default function ProjectDetailPage(props: ProjectDetailPageProps) {
     
     fetchProjectData();
   }, [id]);
-  
-  // Fetch highlights when a video is selected
-  useEffect(() => {
-    const fetchHighlights = async () => {
-      if (!selectedVideo) return;
-      
-      try {
-        // Only fetch highlights if transcription is completed
-        if (selectedVideo.transcription_status === 'transcription_completed') {
-          const highlightsData = await videosApi.getHighlights(id, selectedVideo.id);
-          setHighlights(highlightsData);
-        } else {
-          setHighlights([]);
-        }
-      } catch (err) {
-        console.error('Failed to fetch highlights:', err);
-      }
-    };
-    
-    fetchHighlights();
-  }, [id, selectedVideo]);
 
   // Handle file upload
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -128,11 +106,10 @@ export default function ProjectDetailPage(props: ProjectDetailPageProps) {
     if (!selectedVideo) return;
     
     setIsProcessing(true);
-    
     try {
       await videosApi.triggerTranscription(id, selectedVideo.id, {
-        storage_path: selectedVideo.storage_path,
-        original_filename: selectedVideo.title,
+        storage_path: selectedVideo.storage_path || '',
+        original_filename: selectedVideo.original_filename || '',
       });
       
       // Refresh video data
@@ -153,162 +130,209 @@ export default function ProjectDetailPage(props: ProjectDetailPageProps) {
     }
   };
 
+  // Handle caption overlay processing
+  const handleProcessCaptions = async () => {
+    if (!selectedVideo) return;
+    
+    setIsProcessing(true);
+    try {
+      await videosApi.processCaptions(id, selectedVideo.id);
+      
+      // Refresh video data
+      const updatedVideos = await videosApi.getVideos(id);
+      setVideos(updatedVideos);
+      
+      // Update selected video
+      const updatedVideo = updatedVideos.find(v => v.id === selectedVideo.id);
+      if (updatedVideo) {
+        setSelectedVideo(updatedVideo);
+      }
+      
+      setIsProcessing(false);
+    } catch (err) {
+      console.error('Failed to process captions:', err);
+      setError('Failed to process captions. Please try again.');
+      setIsProcessing(false);
+    }
+  };
+
+  // Handle downloading processed video
+  const handleDownloadProcessedVideo = async () => {
+    if (!selectedVideo || !selectedVideo.processed_video_path) return;
+    
+    try {
+      const processedData = await videosApi.getProcessedVideo(id, selectedVideo.id);
+      if (processedData.download_url) {
+        window.open(processedData.download_url, '_blank');
+      }
+    } catch (err) {
+      console.error('Failed to get download URL:', err);
+      setError('Failed to get download URL. Please try again.');
+    }
+  };
+  
+  if (loading) {
+    return (
+      <MainLayout>
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+      </MainLayout>
+    );
+  }
+  
   return (
     <MainLayout>
       <div className="py-8">
-        <div className="mb-6">
-          <Link href="/" className="text-blue-600 hover:text-blue-800 flex items-center">
-            <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+        {/* Header */}
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <Link href="/" className="text-blue-600 hover:text-blue-800 text-sm mb-2 inline-block">
+              ← Back to Projects
+            </Link>
+            <h1 className="text-2xl font-bold text-gray-900">{project?.name || 'Project'}</h1>
+          </div>
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg flex items-center"
+          >
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
             </svg>
-            Back to Projects
-          </Link>
+            {isUploading ? 'Uploading...' : 'Upload Video'}
+          </button>
+          <input 
+            ref={fileInputRef}
+            type="file" 
+            accept="video/*" 
+            onChange={handleFileUpload}
+            className="hidden" 
+          />
         </div>
         
-        {loading ? (
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-          </div>
-        ) : error ? (
+        {/* Error Message */}
+        {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             {error}
           </div>
+        )}
+        
+        {/* Upload Progress */}
+        {isUploading && (
+          <div className="bg-white shadow rounded-lg p-4 mb-6">
+            <div className="flex items-center">
+              <div className="flex-1">
+                <div className="bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              </div>
+              <span className="ml-4 text-sm text-gray-600">{uploadProgress}%</span>
+            </div>
+          </div>
+        )}
+        
+        {/* Content */}
+        {videos.length === 0 ? (
+          <div className="bg-gray-50 rounded-lg p-8 text-center">
+            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+            </svg>
+            <h3 className="mt-2 text-sm font-medium text-gray-900">No videos uploaded</h3>
+            <p className="mt-1 text-sm text-gray-500">Upload a video to start transcribing and adding captions.</p>
+          </div>
         ) : (
           <>
-            <div className="flex justify-between items-center mb-8">
-              <h1 className="text-2xl font-bold text-gray-900">{project?.title || 'Project'}</h1>
-              <div className="flex space-x-3">
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  onChange={handleFileUpload} 
-                  accept="video/*" 
-                  className="hidden" 
-                />
-                <button 
-                  onClick={() => fileInputRef.current?.click()} 
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg flex items-center"
-                  disabled={isUploading}
-                >
-                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-                  </svg>
-                  Upload Video
-                </button>
-              </div>
-            </div>
-
-            {isUploading && (
-              <div className="mb-6">
-                <div className="w-full bg-gray-200 rounded-full h-2.5">
-                  <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${uploadProgress}%` }}></div>
-                </div>
-                <p className="text-sm text-gray-600 mt-2">Uploading video... {uploadProgress}%</p>
-              </div>
-            )}
-
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Left sidebar - Video List */}
+              {/* Video List */}
               <div className="lg:col-span-1">
-                <div className="bg-white shadow rounded-lg p-6 mb-6">
-                  <h2 className="text-lg font-medium text-gray-900 mb-4">Project Videos</h2>
-                  
-                  {videos.length > 0 ? (
-                    <div className="space-y-4">
-                      {videos.map((video) => (
-                        <div 
-                          key={video.id} 
-                          className={`p-3 rounded-lg cursor-pointer ${selectedVideo?.id === video.id ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50'}`}
-                          onClick={() => setSelectedVideo(video)}
-                        >
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h3 className="font-medium text-gray-900">{video.title}</h3>
-                              <p className="text-sm text-gray-500">{new Date(video.created_at).toLocaleDateString()}</p>
-                            </div>
-                            <div className="ml-2">
-                              {video.transcription_status === 'transcription_completed' ? (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                  Transcribed
-                                </span>
-                              ) : video.transcription_status === 'pending_transcription' ? (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                                  Pending
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                  Not Transcribed
-                                </span>
-                              )}
-                            </div>
-                          </div>
+                <h2 className="text-lg font-medium text-gray-900 mb-4">Videos</h2>
+                <div className="space-y-2">
+                  {videos.map((video) => (
+                    <button
+                      key={video.id}
+                      onClick={() => setSelectedVideo(video)}
+                      className={`w-full text-left p-3 rounded-lg border ${
+                        selectedVideo?.id === video.id 
+                          ? 'border-blue-500 bg-blue-50' 
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="font-medium text-gray-900">{video.original_filename || 'Untitled Video'}</div>
+                      <div className="text-sm text-gray-500 mt-1">
+                        Status: {video.transcription_status || 'pending'}
+                      </div>
+                      {video.processed_video_path && (
+                        <div className="text-sm text-green-600 mt-1">
+                          ✓ Captions processed
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-4">
-                      <p className="text-gray-500">No videos yet. Upload your first video.</p>
-                    </div>
-                  )}
+                      )}
+                    </button>
+                  ))}
                 </div>
               </div>
-
-              {/* Main content - Video Player and Transcription */}
+              
+              {/* Video Details */}
               <div className="lg:col-span-2">
                 {selectedVideo ? (
-                  <div className="bg-white shadow rounded-lg p-6 mb-6">
-                    <h2 className="text-lg font-medium text-gray-900 mb-4">{selectedVideo.title}</h2>
-                    
-                    <div className="aspect-w-16 aspect-h-9 bg-black rounded-lg mb-6">
-                      {/* Video player would go here */}
-                      <div className="flex items-center justify-center h-64 bg-gray-800 text-white">
-                        Video Player Placeholder
+                  <div className="bg-white shadow rounded-lg p-6">
+                    <div className="flex justify-between items-start mb-4">
+                      <h2 className="text-lg font-medium text-gray-900">
+                        {selectedVideo.original_filename || 'Video Details'}
+                      </h2>
+                      <div className="space-x-2">
+                        {selectedVideo.transcription_status !== 'transcription_completed' && (
+                          <button 
+                            onClick={handleTriggerTranscription}
+                            disabled={isProcessing}
+                            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1 px-3 rounded"
+                          >
+                            {isProcessing ? 'Processing...' : 'Trigger Transcription'}
+                          </button>
+                        )}
+                        {selectedVideo.transcription_status === 'transcription_completed' && !selectedVideo.processed_video_path && (
+                          <button 
+                            onClick={handleProcessCaptions}
+                            disabled={isProcessing}
+                            className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium py-1 px-3 rounded"
+                          >
+                            {isProcessing ? 'Processing...' : 'Add Captions'}
+                          </button>
+                        )}
+                        {selectedVideo.processed_video_path && (
+                          <button 
+                            onClick={handleDownloadProcessedVideo}
+                            className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium py-1 px-3 rounded"
+                          >
+                            Download with Captions
+                          </button>
+                        )}
                       </div>
-                    </div>
-                    
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-md font-medium text-gray-900">Transcription Status</h3>
-                      {selectedVideo.transcription_status !== 'transcription_completed' && (
-                        <button 
-                          onClick={handleTriggerTranscription}
-                          disabled={isProcessing}
-                          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1 px-3 rounded"
-                        >
-                          {isProcessing ? 'Processing...' : 'Trigger Transcription'}
-                        </button>
-                      )}
                     </div>
                     
                     {selectedVideo.transcription_status === 'transcription_completed' ? (
                       <div>
                         <div className="mb-6">
                           <h3 className="text-md font-medium text-gray-900 mb-2">Transcription</h3>
-                          <div className="bg-gray-50 p-4 rounded-lg">
-                            <p className="text-gray-700">{typeof selectedVideo.transcription === 'string' ? selectedVideo.transcription : 'Transcription data available'}</p>
+                          <div className="bg-gray-50 p-4 rounded-lg max-h-96 overflow-y-auto">
+                            <p className="text-gray-700 whitespace-pre-wrap">
+                              {typeof selectedVideo.transcription === 'string' 
+                                ? selectedVideo.transcription 
+                                : JSON.stringify(selectedVideo.transcription, null, 2)}
+                            </p>
                           </div>
                         </div>
                         
-                        <div>
-                          <h3 className="text-md font-medium text-gray-900 mb-2">Highlights</h3>
-                          {highlights.length > 0 ? (
-                            <div className="space-y-3">
-                              {highlights.map((highlight, index) => (
-                                <div key={index} className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg">
-                                  <p className="text-gray-700">{highlight.text}</p>
-                                  <div className="flex justify-between text-sm text-gray-500 mt-2">
-                                    <span>Start: {highlight.start_time}s</span>
-                                    <span>End: {highlight.end_time}s</span>
-                                    <span>Score: {highlight.score}</span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="bg-gray-50 p-4 rounded-lg text-center">
-                              <p className="text-gray-500">No highlights detected for this video.</p>
-                            </div>
-                          )}
-                        </div>
+                        {selectedVideo.processed_video_path && (
+                          <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
+                            <p className="text-green-800">
+                              ✓ Video has been processed with captions. Click &quot;Download with Captions&quot; to get the final video.
+                            </p>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="bg-gray-50 p-4 rounded-lg text-center">

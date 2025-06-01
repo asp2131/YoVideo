@@ -41,11 +41,6 @@ class AIServiceStub(object):
                 request_serializer=ai__service__pb2.TranscribeAudioRequest.SerializeToString,
                 response_deserializer=ai__service__pb2.TranscribeAudioResponse.FromString,
                 _registered_method=True)
-        self.DetectHighlights = channel.unary_unary(
-                '/aiservice.AIService/DetectHighlights',
-                request_serializer=ai__service__pb2.DetectHighlightsRequest.SerializeToString,
-                response_deserializer=ai__service__pb2.DetectHighlightsResponse.FromString,
-                _registered_method=True)
         self.FormatCaptions = channel.unary_unary(
                 '/aiservice.AIService/FormatCaptions',
                 request_serializer=ai__service__pb2.FormatCaptionsRequest.SerializeToString,
@@ -64,12 +59,6 @@ class AIServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def DetectHighlights(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
     def FormatCaptions(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -83,11 +72,6 @@ def add_AIServiceServicer_to_server(servicer, server):
                     servicer.TranscribeAudio,
                     request_deserializer=ai__service__pb2.TranscribeAudioRequest.FromString,
                     response_serializer=ai__service__pb2.TranscribeAudioResponse.SerializeToString,
-            ),
-            'DetectHighlights': grpc.unary_unary_rpc_method_handler(
-                    servicer.DetectHighlights,
-                    request_deserializer=ai__service__pb2.DetectHighlightsRequest.FromString,
-                    response_serializer=ai__service__pb2.DetectHighlightsResponse.SerializeToString,
             ),
             'FormatCaptions': grpc.unary_unary_rpc_method_handler(
                     servicer.FormatCaptions,
@@ -124,33 +108,6 @@ class AIService(object):
             '/aiservice.AIService/TranscribeAudio',
             ai__service__pb2.TranscribeAudioRequest.SerializeToString,
             ai__service__pb2.TranscribeAudioResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def DetectHighlights(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/aiservice.AIService/DetectHighlights',
-            ai__service__pb2.DetectHighlightsRequest.SerializeToString,
-            ai__service__pb2.DetectHighlightsResponse.FromString,
             options,
             channel_credentials,
             insecure,

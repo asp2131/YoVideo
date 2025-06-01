@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "OpusClip - AI-Powered Video Editor",
-  description: "Create engaging video clips with AI-powered editing tools",
+  title: "VideoThingy - Video Transcription & Captioning",
+  description: "Upload, transcribe, and add captions to your videos seamlessly.",
 };
 
 export default function RootLayout({

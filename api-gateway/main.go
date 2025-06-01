@@ -34,7 +34,7 @@ func main() {
 	// Create a new Fiber app instance with custom error handling
 	app := fiber.New(fiber.Config{
 		// ErrorHandler: utils.CustomErrorHandler, // Removed custom error handler for now
-		BodyLimit: 100 * 1024 * 1024, // 100 MB limit
+		BodyLimit: 1 * 1024 * 1024 * 1024, // 1 GB limit for large video uploads
 	})
 
 	// Middleware
@@ -59,7 +59,6 @@ func main() {
 	projectsGroup.Post("/", handlers.CreateProject) 
 	projectsGroup.Get("/", handlers.GetProjects)
 	projectsGroup.Get("/:id", handlers.GetProject) 
-	// projectsGroup.Patch("/:id", handlers.UpdateProject) // Commented out until implemented
 	projectsGroup.Delete("/:id", handlers.DeleteProject)
 
 	// --- Video Routes ---
@@ -69,26 +68,8 @@ func main() {
 	videosGroup.Post("/:videoId/upload", appHandler.UploadFileHandler) // Direct upload endpoint to avoid CORS issues
 	videosGroup.Post("/:videoId/trigger-transcription", appHandler.TriggerTranscription)
 	videosGroup.Get("/:videoId/transcription", appHandler.GetVideoTranscription) // Get video transcription
-	videosGroup.Get("/:videoId/highlights", appHandler.DetectVideoHighlights) // Detect video highlights
-
-	// --- Clip Routes (Example) ---
-	// clipsGroup := projectsGroup.Path("/:projectId/clips")
-	// clipsGroup.Post("/", appHandler.CreateClip) // Commented out
-	// clipsGroup.Get("/", appHandler.ListClips)       // Commented out
-	// clipsGroup.Get("/:clipId", appHandler.GetClip) // Commented out
-	// clipsGroup.Patch("/:clipId", appHandler.UpdateClip) // Commented out
-	// clipsGroup.Delete("/:clipId", appHandler.DeleteClip) // Commented out
-
-	// --- Caption Routes (Example) ---
-	// captionsGroup := clipsGroup.Path("/:clipId/captions")
-	// captionsGroup.Post("/", appHandler.CreateCaption) // Commented out
-	// captionsGroup.Get("/", appHandler.ListCaptions)       // Commented out
-	// captionsGroup.Get("/:captionId", appHandler.GetCaption) // Commented out
-	// captionsGroup.Patch("/:captionId", appHandler.UpdateCaption) // Commented out
-	// captionsGroup.Delete("/:captionId", appHandler.DeleteCaption) // Commented out
-
-	// --- Job Status Route (Example) ---
-	// v1.Get("/jobs/:jobId/status", appHandler.GetJobStatus) // Commented out
+	videosGroup.Get("/:videoId/processed", appHandler.GetProcessedVideo) // Get processed video with captions
+	videosGroup.Post("/:videoId/process-captions", appHandler.ProcessCaptions) // Process video with caption overlay
 
 	// Start the server
 	port := os.Getenv("PORT")

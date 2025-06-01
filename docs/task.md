@@ -1,152 +1,198 @@
-# 📝 Task Board – OpusClip Clone Implementation
+# 📹 Video Transcription & Caption Overlay System - Refactoring Plan
 
-### Legend
-- 🔵 **To‑Do**
-- 🟡 **In‑Progress**
-- 🟢 **Done**
+## 🎯 New Project Direction
+Pivot from clip creation to a focused video transcription and caption overlay system that can handle large video files (1GB+).
 
-## Phase 1 – Frontend Development
-| ID | Task | Status |
-|----|------|-------|
-| F-1 | Set up Next.js project with Tailwind CSS | 🟢 |
-| F-2 | Create responsive layout with navigation | 🟢 |
-| F-3 | Implement project management UI (create, list, delete) | 🟢 |
-| F-4 | Build video upload component with drag-and-drop | 🟢 |
-| F-5 | Create video player with transcription display | 🟢 |
-| F-6 | Implement clip editor interface with timeline | 🟢 |
-| F-7 | Build template selection and preview component | 🟢 |
-| F-8 | Create captions editor with timestamps | 🟢 |
-| F-9 | Design B-roll insertion interface | 🟢 |
-| F-10 | Implement clip preview with aspect ratio selection | 🟢 |
-| F-11 | Create download interface for finished clips | 🟢 |
-| F-12 | Add processing status indicators and progress bars | 🟢 |
-| F-13 | Implement error handling and user feedback | 🟢 |
-| F-14 | Add responsive design for mobile/tablet | 🟢 |
+### Core Features
+1. **Video Upload** - Support for large files (up to 1GB)
+2. **Automatic Transcription** - Using Whisper AI
+3. **Caption Overlay** - Embed captions directly into uploaded videos
+4. **Download** - Get the video with embedded captions
 
-## Phase 2 – API Gateway (Go)
-| ID | Task | Status |
-|----|------|-------|
-| G-1 | Set up Go API server with Fiber | 🟢 |
-| G-2 | Implement Supabase client for database operations | 🟢 |
-| G-3 | Create project management endpoints (CRUD) | 🟢 |
-| G-3.1 | Create clip management endpoints (CRUD) | 🟢 |
-| G-4 | Build video upload endpoint with direct storage upload | 🟢 |
-| G-5 | Implement clip generation request endpoints | 🟢 |
-| G-6 | Implement caption CRUD endpoints | 🟢 |
-<!-- | G-7 | Create B-roll management endpoints | 🔵 | -->
-| G-7 | Build file serving endpoints for processed videos | 🟢 |
-| G-8 | Implement job status monitoring endpoints | 🟢 |
-| G-9 | Add error handling and validation middleware | 🟢 |
-| G-10 | Implement logging and monitoring | 🟢 |
-| G-11 | Build API documentation with Swagger | 🟡 |
+---
 
-## Phase 3 – Video Processor (Go)
-| ID | Task | Status |
-|----|------|-------|
-| V-1 | Create worker pool architecture for processing tasks | 🟢 |
-| V-2 | Implement FFmpeg wrapper for video manipulation | 🟢 |
-| V-3 | Build video metadata extraction service (MVP: basic info) | 🟢 |
-| V-4 | Create transcription request handler to AI service | 🟢 |
-| V-5 | Implement highlight detection request handler | 🟢 |
-| V-6 | Build clip extraction service from timestamps | 🟢 |
-| V-7 | Create caption overlay renderer | 🟢 |
-| V-8 | Implement aspect ratio adjustment service (Post-MVP) | 🟢 |
-| V-9 | Build template application service (Post-MVP) | 🟢 |
-<!-- | V-10 | Create B-roll insertion service | 🔵 | -->
-| V-10 | Implement final video composition engine | 🟢 |
-| V-11 | Add error handling and recovery mechanisms | 🟢 |
-| V-12 | Implement job status updates to database | 🟢 |
-| V-13 | Create cleanup service for temporary files | 🟢 |
-| V-14 | Testing & Verification | 🟢 |
-  - Run the application, submit various jobs.
-  - Verify records in Supabase: `PENDING` -> `PROCESSING` -> `COMPLETED`/`FAILED`.
-  - Check `input_payload`, `output_details`, `error_message` are correctly stored.
-  - **Status: Done**
+## 🔍 Current System Analysis
 
-## Phase 4 – AI Service (Python)
-| ID | Task | Status |
-|----|------|-------|
-| A-1 | Set up FastAPI service with model loading | 🟢 |
-| A-2 | Implement Whisper for transcription | 🟢 |
-| A-3 | Create highlight detection service | 🟢 |
-<!-- | A-4 | Build virality score prediction | 🔵 | -->
-<!-- | A-5 | Implement B-roll suggestion service | 🔵 | -->
-| A-6 | Create caption formatting optimization | 🟢 |
-| A-7 | Build gRPC interface for Go service communication | 🟢 |
-| A-8 | Implement batch processing for efficiency | 🔵 |
-| A-9 | Connect the frontend to the API gateway | 🟢 |
-| A-10 | Connect the API gateway to the AI service | 🟢 |
-| A-11 | Implement gRPC server for AI service | 🟢 |
-| A-12 | Implement gRPC client for Go service | 🟢 |
-| A-13 | Make sure everything is connected and works for MVP | 🟢 |
-| A-14 | Implement model caching for performance | 🔵 |
-| A-15 | Create fallback mechanisms for model failures | 🔵 |
-| A-16 | Add error handling and logging | 🔵 |
-| A-17 | Implement monitoring for AI service health | 🔵 |
+### Existing Components
+1. **Frontend (Next.js)**
+   - ✅ Video upload interface
+   - ✅ Project management
+   - ❌ Clip editor (to be removed)
+   - ❌ B-roll features (to be removed)
+   - ✅ Video player with transcription display
 
-## Technical Implementation Details
+2. **API Gateway (Go)**
+   - ✅ Video upload endpoints
+   - ✅ Transcription trigger
+   - ✅ Project management
+   - ❌ Clip generation endpoints (to be removed)
+   - ❌ Caption CRUD (to be simplified)
 
-### Recommended Hugging Face Models
+3. **Video Processor (Go)**
+   - ✅ FFmpeg wrapper
+   - ✅ Caption overlay functionality
+   - ❌ Clip extraction (to be removed)
+   - ✅ Video metadata extraction
 
-#### Transcription
-- **Model**: `openai/whisper-large-v3`
-- **Alternative**: `facebook/wav2vec2-large-960h-lv60-self`
-- **Purpose**: High-accuracy speech-to-text conversion with timestamps
+4. **AI Service (Python)**
+   - ✅ Whisper transcription
+   - ✅ Highlight detection (REMOVED)
+   - ✅ gRPC communication
 
-#### Highlight Detection
-- **Model**: `facebook/bart-large-cnn`
-- **Alternative**: `microsoft/videomae-base`
-- **Purpose**: Identify engaging segments in videos based on content
+5. **Database (Supabase)**
+   - Tables: projects, videos, clips, captions, video_job_statuses
+   - Need to simplify schema
 
-#### Content Understanding
-- **Model**: `BAAI/bge-large-en-v1.5`
-- **Alternative**: `sentence-transformers/all-MiniLM-L6-v2`
-- **Purpose**: Generate embeddings for semantic understanding of video content
+---
 
-#### B-Roll Suggestion
-- **Model**: `Nerfgun3/image-to-text-video-b-roll-generator`
-- **Alternative**: `salesforce/blip2-opt-2.7b`
-- **Purpose**: Suggest relevant B-roll footage based on spoken content
+## 📋 Refactoring Tasks
 
-#### Virality Prediction
-- **Model**: Custom fine-tuned model based on `microsoft/videomae-base-finetuned-kinetics`
-- **Purpose**: Score clip potential for engagement
+### Phase 1: Database Schema Simplification
+| Task | Status | Description |
+|------|--------|-------------|
+| Remove clips table | 🔵 | No longer needed |
+| Simplify captions table | 🔵 | Only store full video captions |
+| Update videos table | 🔵 | Add caption_file_url, processed_video_url fields |
+| Create migration script | 🔵 | Migrate existing data if needed |
 
-### Architecture Diagram
+### Phase 2: Backend Refactoring
+| Task | Status | Description |
+|------|--------|-------------|
+| Remove clip-related endpoints | 🔵 | Clean up API Gateway |
+| Update video upload handler | 🔵 | Support 1GB file uploads |
+| Simplify transcription workflow | 🔵 | Direct video → transcription → overlay |
+| Remove highlight detection | ✅ | From AI service |
+| Update job processing | 🔵 | Single job type: transcribe & overlay |
+| Add progress tracking | 🔵 | For large file processing |
+
+### Phase 3: Frontend Simplification
+| Task | Status | Description |
+|------|--------|-------------|
+| Remove clip editor UI | 🔵 | Not needed anymore |
+| Remove B-roll components | 🔵 | Not needed |
+| Remove template selector | 🔵 | Not needed |
+| Update video page | 🔵 | Show transcription & download |
+| Add upload progress | 🔵 | For large files |
+| Simplify navigation | 🔵 | Remove unused sections |
+
+### Phase 4: Processing Pipeline
+| Task | Status | Description |
+|------|--------|-------------|
+| Implement chunked upload | 🔵 | For 1GB files |
+| Add video queue system | 🔵 | Handle multiple uploads |
+| Optimize FFmpeg settings | 🔵 | For large file processing |
+| Add SRT generation | 🔵 | From transcription data |
+| Implement caption styling | 🔵 | Basic subtitle styling |
+
+### Phase 5: Testing & Optimization
+| Task | Status | Description |
+|------|--------|-------------|
+| Test with 1GB files | 🔵 | Ensure system handles large files |
+| Add error recovery | 🔵 | Resume failed uploads |
+| Optimize memory usage | 🔵 | For video processing |
+| Add processing timeouts | 🔵 | Prevent stuck jobs |
+| Performance monitoring | 🔵 | Track processing times |
+
+---
+
+## 🏗️ New Architecture
+
 ```
 ┌─────────────────┐       ┌─────────────────┐
 │    Frontend     │◄─────►│   API Gateway   │
-│    (Next.js)    │       │      (Go)       │
+│   (Next.js)     │       │      (Go)       │
 └─────────────────┘       └────────┬────────┘
                                    │
-                                   ▼
-         ┌─────────────────────────────────────────┐
-         │                                         │
-┌────────▼─────────┐  ┌─────────────┐  ┌──────────▼────────┐
-│  Video Processor │  │  AI Service │  │  Storage Manager  │
-│       (Go)       │◄─►│  (Python)  │  │        (Go)       │
-└──────────────────┘  └─────────────┘  └─────────────────────┘
-         │                                         │
-         ▼                                         ▼
-┌─────────────────┐                     ┌─────────────────────┐
-│    FFmpeg &     │                     │    Supabase         │
-│ Media Libraries │                     │    (PostgreSQL/S3)  │
-└─────────────────┘                     └─────────────────────┘
+                          ┌────────▼────────┐
+                          │ Video Processor │
+                          │      (Go)       │
+                          └────────┬────────┘
+                                   │
+                          ┌────────▼────────┐
+                          │   AI Service    │
+                          │   (Python)      │
+                          └────────┬────────┘
+                                   │
+                          ┌────────▼────────┐
+                          │    Supabase     │
+                          │  (Storage/DB)   │
+                          └─────────────────┘
 ```
 
-### Deployment Considerations
-- Use Docker for containerization of all services
-- Implement Kubernetes for orchestration in production
-- Consider using serverless functions for the AI service to scale efficiently
-- Use a CDN for delivering processed videos
-- Implement proper CI/CD pipelines for all components
+## 📊 Simplified Data Flow
 
-## Backlog
-- Add feature to extract clips from multiple videos for compilation
-- Implement advanced B-roll generation with AI
-- Add multi-language support for transcription and captions
-- Create analytics dashboard for clip performance
-- Implement advanced template editor for custom designs
-- Add audio enhancement features for better sound quality
+1. **Upload**: User uploads video (up to 1GB)
+2. **Store**: Video stored in Supabase Storage
+3. **Transcribe**: AI Service processes with Whisper
+4. **Generate**: Create SRT file from transcription
+5. **Overlay**: FFmpeg adds captions to video
+6. **Complete**: User downloads captioned video
 
-> Update statuses daily at stand‑up. Track progress and blockers in team meetings.
+---
+
+## 🗑️ Components to Remove
+
+### Frontend
+- [x] `/components/ui/ClipEditor.tsx` (Renamed to .deprecated.tsx)
+- [x] `/components/ui/BRollSelector.tsx` (Renamed to .deprecated.tsx)
+- [x] `/components/ui/TemplateSelector.tsx` (Renamed to .deprecated.tsx)
+- [x] `/components/ui/AspectRatioPreview.tsx` (Renamed to .deprecated.tsx)
+- [~] Clip-related pages and routes (Removed /templates link, API functions for highlights. Further cleanup might be needed within existing project pages)
+
+### Backend
+- [~] Clip management endpoints (Partially removed: routes commented, job submission removed)
+- [✅] Highlight detection logic
+- [ ] B-roll processing
+- [ ] Template application
+- [ ] Complex caption CRUD
+
+### Database
+- `clips` table
+- `templates` table (if exists)
+- Complex relationships
+
+---
+
+## 🚀 Implementation Priority
+
+1. **Week 1**: Database schema migration & backend cleanup
+2. **Week 2**: Update processing pipeline for large files
+3. **Week 3**: Frontend simplification & UI updates
+4. **Week 4**: Testing, optimization & deployment
+
+---
+
+## 📈 Success Metrics
+
+- Support 1GB video uploads
+- Process video in < 10 minutes
+- 95% transcription accuracy
+- Clean, embedded captions
+- Simple user workflow
+
+---
+
+## 🔧 Technical Considerations
+
+### Large File Handling
+- Implement multipart upload
+- Use streaming for video processing
+- Add progress indicators
+- Handle network interruptions
+
+### Performance
+- Queue system for concurrent processing
+- Optimize FFmpeg commands
+- Cache transcription results
+- CDN for processed videos
+
+### Error Handling
+- Graceful failure recovery
+- Clear error messages
+- Retry mechanisms
+- Job status tracking
+
+---
+
+> Last Updated: 2025-05-31
+> Status: Planning Phase

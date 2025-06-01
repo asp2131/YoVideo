@@ -15,7 +15,6 @@ import (
 // The concrete implementation will be provided by the aiclient package.
 type AIClientInterface interface {
 	TranscribeAudio(ctx context.Context, videoStoragePath string, originalFilename string) (*aiservice.TranscribeAudioResponse, error)
-	DetectHighlights(ctx context.Context, segments []*aiservice.TranscriptSegment) (*aiservice.DetectHighlightsResponse, error)
 	FormatCaptions(ctx context.Context, segments []*aiservice.TranscriptSegment, maxChars int32, maxLines int32) (*aiservice.FormatCaptionsResponse, error)
 	Close() error
 }

@@ -24,30 +24,23 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10\x61i_service.proto\x12\taiservice\"G\n\x11TranscriptSegment\x12\x0c\n\x04text\x18\x01 \x01(\t\x12\x12\n\nstart_time\x18\x02 \x01(\x01\x12\x10\n\x08\x65nd_time\x18\x03 \x01(\x01\"N\n\tHighlight\x12\x0c\n\x04text\x18\x01 \x01(\t\x12\x12\n\nstart_time\x18\x02 \x01(\x01\x12\x10\n\x08\x65nd_time\x18\x03 \x01(\x01\x12\r\n\x05score\x18\x04 \x01(\x02\"O\n\x16TranscribeAudioRequest\x12\x1a\n\x12video_storage_path\x18\x01 \x01(\t\x12\x19\n\x11original_filename\x18\x02 \x01(\t\"[\n\x17TranscribeAudioResponse\x12\x10\n\x08\x66ilename\x18\x01 \x01(\t\x12.\n\x08segments\x18\x02 \x03(\x0b\x32\x1c.aiservice.TranscriptSegment\"I\n\x17\x44\x65tectHighlightsRequest\x12.\n\x08segments\x18\x01 \x03(\x0b\x32\x1c.aiservice.TranscriptSegment\"D\n\x18\x44\x65tectHighlightsResponse\x12(\n\nhighlights\x18\x01 \x03(\x0b\x32\x14.aiservice.Highlight\"\x82\x01\n\x15\x46ormatCaptionsRequest\x12.\n\x08segments\x18\x01 \x03(\x0b\x32\x1c.aiservice.TranscriptSegment\x12\x1a\n\x12max_chars_per_line\x18\x02 \x01(\x05\x12\x1d\n\x15max_lines_per_caption\x18\x03 \x01(\x05\"-\n\x16\x46ormatCaptionsResponse\x12\x13\n\x0bsrt_content\x18\x01 \x01(\t2\x99\x02\n\tAIService\x12X\n\x0fTranscribeAudio\x12!.aiservice.TranscribeAudioRequest\x1a\".aiservice.TranscribeAudioResponse\x12[\n\x10\x44\x65tectHighlights\x12\".aiservice.DetectHighlightsRequest\x1a#.aiservice.DetectHighlightsResponse\x12U\n\x0e\x46ormatCaptions\x12 .aiservice.FormatCaptionsRequest\x1a!.aiservice.FormatCaptionsResponseB)Z\'./internal/goclient/aiservice;aiserviceb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10\x61i_service.proto\x12\taiservice\"G\n\x11TranscriptSegment\x12\x0c\n\x04text\x18\x01 \x01(\t\x12\x12\n\nstart_time\x18\x02 \x01(\x01\x12\x10\n\x08\x65nd_time\x18\x03 \x01(\x01\"G\n\x16TranscribeAudioRequest\x12\x12\n\naudio_data\x18\x01 \x01(\x0c\x12\x19\n\x11original_filename\x18\x02 \x01(\t\"[\n\x17TranscribeAudioResponse\x12\x10\n\x08\x66ilename\x18\x01 \x01(\t\x12.\n\x08segments\x18\x02 \x03(\x0b\x32\x1c.aiservice.TranscriptSegment\"\x82\x01\n\x15\x46ormatCaptionsRequest\x12.\n\x08segments\x18\x01 \x03(\x0b\x32\x1c.aiservice.TranscriptSegment\x12\x1a\n\x12max_chars_per_line\x18\x02 \x01(\x05\x12\x1d\n\x15max_lines_per_caption\x18\x03 \x01(\x05\"-\n\x16\x46ormatCaptionsResponse\x12\x13\n\x0bsrt_content\x18\x01 \x01(\t2\xbc\x01\n\tAIService\x12X\n\x0fTranscribeAudio\x12!.aiservice.TranscribeAudioRequest\x1a\".aiservice.TranscribeAudioResponse\x12U\n\x0e\x46ormatCaptions\x12 .aiservice.FormatCaptionsRequest\x1a!.aiservice.FormatCaptionsResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'ai_service_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'Z\'./internal/goclient/aiservice;aiservice'
+  DESCRIPTOR._loaded_options = None
   _globals['_TRANSCRIPTSEGMENT']._serialized_start=31
   _globals['_TRANSCRIPTSEGMENT']._serialized_end=102
-  _globals['_HIGHLIGHT']._serialized_start=104
-  _globals['_HIGHLIGHT']._serialized_end=182
-  _globals['_TRANSCRIBEAUDIOREQUEST']._serialized_start=184
-  _globals['_TRANSCRIBEAUDIOREQUEST']._serialized_end=263
-  _globals['_TRANSCRIBEAUDIORESPONSE']._serialized_start=265
-  _globals['_TRANSCRIBEAUDIORESPONSE']._serialized_end=356
-  _globals['_DETECTHIGHLIGHTSREQUEST']._serialized_start=358
-  _globals['_DETECTHIGHLIGHTSREQUEST']._serialized_end=431
-  _globals['_DETECTHIGHLIGHTSRESPONSE']._serialized_start=433
-  _globals['_DETECTHIGHLIGHTSRESPONSE']._serialized_end=501
-  _globals['_FORMATCAPTIONSREQUEST']._serialized_start=504
-  _globals['_FORMATCAPTIONSREQUEST']._serialized_end=634
-  _globals['_FORMATCAPTIONSRESPONSE']._serialized_start=636
-  _globals['_FORMATCAPTIONSRESPONSE']._serialized_end=681
-  _globals['_AISERVICE']._serialized_start=684
-  _globals['_AISERVICE']._serialized_end=965
+  _globals['_TRANSCRIBEAUDIOREQUEST']._serialized_start=104
+  _globals['_TRANSCRIBEAUDIOREQUEST']._serialized_end=175
+  _globals['_TRANSCRIBEAUDIORESPONSE']._serialized_start=177
+  _globals['_TRANSCRIBEAUDIORESPONSE']._serialized_end=268
+  _globals['_FORMATCAPTIONSREQUEST']._serialized_start=271
+  _globals['_FORMATCAPTIONSREQUEST']._serialized_end=401
+  _globals['_FORMATCAPTIONSRESPONSE']._serialized_start=403
+  _globals['_FORMATCAPTIONSRESPONSE']._serialized_end=448
+  _globals['_AISERVICE']._serialized_start=451
+  _globals['_AISERVICE']._serialized_end=639
 # @@protoc_insertion_point(module_scope)

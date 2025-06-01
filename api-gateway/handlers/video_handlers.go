@@ -15,7 +15,6 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"videothingy/api-gateway/config"
-	"videothingy/api-gateway/internal/goclient/aiservice"
 	"videothingy/api-gateway/models"
 )
 
@@ -487,14 +486,10 @@ func (h *ApplicationHandler) ListVideos(c *fiber.Ctx) error {
 	})
 }
 
-// DetectVideoHighlights handles the request to detect highlights from a video's transcription.
-// It fetches the transcription data, sends it to the AI service for highlight detection,
-// and returns the detected highlights.
-func (h *ApplicationHandler) DetectVideoHighlights(c *fiber.Ctx) error {
+// GetProcessedVideo retrieves the processed video with embedded captions
+func (h *ApplicationHandler) GetProcessedVideo(c *fiber.Ctx) error {
 	projectIDStr := c.Params("projectId")
 	videoIDStr := c.Params("videoId")
-
-	h.Logger.Infof("Received request to detect highlights for video ID %s in project %s", videoIDStr, projectIDStr)
 
 	projectID, err := uuid.Parse(projectIDStr)
 	if err != nil {
@@ -506,140 +501,121 @@ func (h *ApplicationHandler) DetectVideoHighlights(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "error", "message": "Invalid video ID format"})
 	}
 
-	// Fetch the source video to ensure it exists and belongs to the project
+	// Fetch the video record
 	video, err := h.getSourceVideoByIDAndProjectID(c.Context(), videoID, projectID)
 	if err != nil {
-		if errors.Is(err, ErrRecordNotFound) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"status": "error", "message": "Video not found or does not belong to the specified project"})
+		if err == ErrRecordNotFound {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"status": "error", "message": "Video not found"})
 		}
-		h.Logger.Errorf("Error fetching video %s for project %s: %v", videoID, projectID, err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to fetch video details"})
+		h.Logger.Errorf("Error fetching video %s: %v", videoID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to fetch video"})
 	}
 
-	// Check if the video has been transcribed
-	if video.TranscriptionStatus == nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Video transcription status is not available",
+	// Check if the video has been processed
+	if video.ProcessedVideoURL == nil || *video.ProcessedVideoURL == "" {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"status": "error", 
+			"message": "Video has not been processed yet",
+			"processing_status": video.ProcessingStatus,
 		})
 	}
 
-	// Check for various completed status formats (COMPLETED, completed, transcription_completed)
-	statusText := strings.ToLower(*video.TranscriptionStatus)
-	if !strings.Contains(statusText, "complete") {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"status":  "error",
-			"message": fmt.Sprintf("Video transcription is not complete. Current status: %s", *video.TranscriptionStatus),
-		})
+	// Return the processed video URL and caption file URL
+	response := fiber.Map{
+		"status": "success",
+		"processed_video_url": *video.ProcessedVideoURL,
+		"processing_status": video.ProcessingStatus,
 	}
 
-	// Parse the transcription data
-	var segments []*aiservice.TranscriptSegment
-
-	// First try to parse as JSON
-	var transcriptionData models.TranscriptionData
-	if err := json.Unmarshal(video.Transcription, &transcriptionData); err != nil {
-		// If JSON parsing fails, check if it's a plain text string
-		transcriptionText := string(video.Transcription)
-		if len(transcriptionText) > 0 && transcriptionText[0] != '{' && transcriptionText[0] != '[' {
-			// It's a plain text string, create a single segment with the entire text
-			h.Logger.Infof("Using plain text transcription for video %s: %s", videoID, transcriptionText)
-			segments = append(segments, &aiservice.TranscriptSegment{
-				Text:      transcriptionText,
-				StartTime: 0.0,
-				EndTime:   60.0, // Assume 60 seconds if we don't know the actual duration
-			})
-		} else {
-			// It's not a plain text string and JSON parsing failed
-			h.Logger.Errorf("Error parsing transcription data for video %s: %v", videoID, err)
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to parse transcription data"})
-		}
-	} else {
-		// JSON parsing succeeded, use the segments from the transcription data
-		for _, segment := range transcriptionData.Segments {
-			segments = append(segments, &aiservice.TranscriptSegment{
-				Text:      segment.Text,
-				StartTime: segment.StartTime,
-				EndTime:   segment.EndTime,
-			})
-		}
+	if video.CaptionFileURL != nil && *video.CaptionFileURL != "" {
+		response["caption_file_url"] = *video.CaptionFileURL
 	}
 
-	// Check if we have any segments to process
-	if len(segments) == 0 {
-		h.Logger.Warnf("No transcription segments found for video %s", videoID)
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "error", "message": "No transcription segments found"})
-	}
-
-	// Call the AI service to detect highlights
-	highlightsResponse, err := h.AIClient.DetectHighlights(c.Context(), segments)
-	if err != nil {
-		h.Logger.Errorf("Error detecting highlights for video %s: %v", videoID, err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to detect highlights"})
-	}
-
-	// Convert the highlights to a format suitable for the response
-	type HighlightResponse struct {
-		Text      string  `json:"text"`
-		StartTime float64 `json:"start_time"`
-		EndTime   float64 `json:"end_time"`
-		Score     float32 `json:"score"`
-	}
-
-	var highlightsResult []HighlightResponse
-	for _, highlight := range highlightsResponse.GetHighlights() {
-		highlightsResult = append(highlightsResult, HighlightResponse{
-			Text:      highlight.GetText(),
-			StartTime: highlight.GetStartTime(),
-			EndTime:   highlight.GetEndTime(),
-			Score:     highlight.GetScore(),
-		})
-	}
-
-	// Store the highlights in the database
-	highlightsData, err := json.Marshal(models.HighlightData{
-		Highlights: convertToModelHighlights(highlightsResponse.GetHighlights()),
-	})
-	if err != nil {
-		h.Logger.Errorf("Error marshaling highlights data for video %s: %v", videoID, err)
-		// Continue with the response even if storing fails
-	} else {
-		// Update the video record with the highlights data
-		updates := map[string]interface{}{
-			"highlight_markers": highlightsData,
-			"updated_at":        time.Now(),
-		}
-
-		_, count, err := h.DB.From("source_videos").
-			Update(updates, "", "exact").
-			Eq("id", videoID.String()).
-			Execute()
-
-		if err != nil {
-			h.Logger.Errorf("Error updating highlights for video %s: %v", videoID, err)
-			// Continue with the response even if storing fails
-		} else if count == 0 {
-			h.Logger.Warnf("No rows updated when saving highlights for video %s", videoID)
-		}
-	}
-
-	h.Logger.Infof("Successfully detected %d highlights for video %s", len(highlightsResult), videoID)
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"status":     "success",
-		"highlights": highlightsResult,
-	})
+	return c.Status(fiber.StatusOK).JSON(response)
 }
 
-// convertToModelHighlights converts aiservice.Highlight slice to models.Highlight slice
-func convertToModelHighlights(highlights []*aiservice.Highlight) []models.Highlight {
-	result := make([]models.Highlight, len(highlights))
-	for i, h := range highlights {
-		result[i] = models.Highlight{
-			Text:      h.GetText(),
-			StartTime: h.GetStartTime(),
-			EndTime:   h.GetEndTime(),
-			Score:     h.GetScore(),
-		}
+// ProcessCaptions triggers the caption overlay process for a video
+func (h *ApplicationHandler) ProcessCaptions(c *fiber.Ctx) error {
+	projectIDStr := c.Params("projectId")
+	videoIDStr := c.Params("videoId")
+
+	projectID, err := uuid.Parse(projectIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "error", "message": "Invalid project ID format"})
 	}
-	return result
+
+	videoID, err := uuid.Parse(videoIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "error", "message": "Invalid video ID format"})
+	}
+
+	// Fetch the video record
+	video, err := h.getSourceVideoByIDAndProjectID(c.Context(), videoID, projectID)
+	if err != nil {
+		if err == ErrRecordNotFound {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"status": "error", "message": "Video not found"})
+		}
+		h.Logger.Errorf("Error fetching video %s: %v", videoID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to fetch video"})
+	}
+
+	// Check if transcription is available
+	if video.TranscriptionStatus == nil || *video.TranscriptionStatus != "completed" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status": "error", 
+			"message": "Video must be transcribed before processing captions",
+			"transcription_status": video.TranscriptionStatus,
+		})
+	}
+
+	// Check if video is already being processed
+	if video.ProcessingStatus != nil && (*video.ProcessingStatus == "processing" || *video.ProcessingStatus == "captioning") {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+			"status": "error",
+			"message": "Video is already being processed",
+			"processing_status": *video.ProcessingStatus,
+		})
+	}
+
+	// Update processing status
+	now := time.Now()
+	processingStatus := "captioning"
+	updates := map[string]interface{}{
+		"processing_status": processingStatus,
+		"processing_started_at": now,
+		"updated_at": now,
+	}
+
+	_, count, err := h.DB.From("source_videos").
+		Update(updates, "", "exact").
+		Eq("id", videoID.String()).
+		Execute()
+
+	if err != nil {
+		h.Logger.Errorf("Error updating processing status for video %s: %v", videoID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"status": "error", "message": "Failed to update processing status"})
+	}
+
+	if count == 0 {
+		h.Logger.Warnf("No rows updated when setting processing status for video %s", videoID)
+	}
+
+	// TODO: Trigger the actual video processing job
+	// This would typically involve:
+	// 1. Creating a job in the video_job_statuses table
+	// 2. Sending a message to the video processor service
+	// 3. The video processor would:
+	//    - Generate SRT file from transcription
+	//    - Use FFmpeg to overlay captions
+	//    - Upload processed video to storage
+	//    - Update the database with URLs
+
+	// For now, return success indicating the process has been initiated
+	h.Logger.Infof("Caption processing initiated for video %s", videoID)
+	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
+		"status": "success",
+		"message": "Caption processing initiated",
+		"video_id": videoID.String(),
+		"processing_status": processingStatus,
+	})
 }

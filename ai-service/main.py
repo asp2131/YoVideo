@@ -10,23 +10,12 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- Pydantic Models for Highlight Detection ---
+# --- Pydantic Models for Transcription ---
 class TranscriptSegment(BaseModel):
     text: str
     start_time: float
     end_time: float
 
-class HighlightDetectionRequest(BaseModel):
-    segments: list[TranscriptSegment]
-    # num_highlights: int = 5 # Optional: to limit results
-
-class Highlight(TranscriptSegment):
-    score: float
-
-class HighlightDetectionResponse(BaseModel):
-    highlights: list[Highlight]
-
-# --- Pydantic Model for Transcription Response ---
 class TranscriptionResponse(BaseModel):
     filename: str
     segments: list[TranscriptSegment]
@@ -42,8 +31,8 @@ class CaptionFormatResponse(BaseModel):
 
 app = FastAPI(
     title="VideoThingy AI Service",
-    description="Provides AI-powered functionalities like transcription, highlight detection, etc.",
-    version="0.1.0",
+    description="Provides AI-powered video transcription and caption formatting",
+    version="0.2.0",
 )
 
 @app.get("/")
@@ -106,105 +95,13 @@ async def transcribe_audio(audio_file: UploadFile = File(...)):
         if 'tmp_audio_file_path' in locals() and os.path.exists(tmp_audio_file_path):
             os.remove(tmp_audio_file_path)
             logger.info(f"Temporary audio file {tmp_audio_file_path} deleted.")
-        # Ensure the uploaded file's resources are closed
-        await audio_file.close()
 
-    return TranscriptionResponse(filename=audio_file.filename, segments=processed_segments)
+    return TranscriptionResponse(
+        filename=audio_file.filename,
+        segments=processed_segments
+    )
 
-# --- Highlight Detection Endpoint ---
-# Keywords that might indicate important content
-INTERESTING_KEYWORDS = [
-    "important", "key", "remember", "secret", "amazing", "best part",
-    "check out", "don't miss", "finally", "conclusion", "summary",
-    "main point", "critical", "essential", "must-see", "must-watch",
-    "highlight", "takeaway", "lesson learned", "advice", "tip",
-    "what if", "how to", "why", "because", "actually", "literally",
-    "believe it or not", "you won't believe", "insane", "crazy"
-]
-
-# Action-oriented phrases that often indicate instructions or steps
-ACTION_PHRASES = [
-    "put", "take", "get", "use", "make", "create", "start", "begin", 
-    "first", "second", "third", "next", "then", "after", "before",
-    "step", "process", "method", "technique", "approach", "way to",
-    "add", "remove", "cut", "place", "position", "move", "shift",
-    "increase", "decrease", "reduce", "expand", "grow", "shrink",
-    "wait", "let", "allow", "enable", "disable", "turn on", "turn off"
-]
-
-@app.post("/detect-highlights", response_model=HighlightDetectionResponse)
-async def detect_highlights(request: HighlightDetectionRequest):
-    if not request.segments:
-        return HighlightDetectionResponse(highlights=[])
-    
-    # Step 1: Identify the main topic by analyzing all segments together
-    all_text = " ".join([segment.text for segment in request.segments])
-    
-    # Step 2: Process each segment for highlighting
-    highlights_with_scores = []
-    
-    for segment in request.segments:
-        score = 0
-        segment_text_lower = segment.text.lower()
-        
-        # Score based on traditional keywords
-        for keyword in INTERESTING_KEYWORDS:
-            if keyword.lower() in segment_text_lower:
-                score += 1
-        
-        # Score based on action phrases that indicate instructions or steps
-        for phrase in ACTION_PHRASES:
-            if phrase.lower() in segment_text_lower:
-                score += 0.5  # Give less weight to common action words
-        
-        # Score based on segment length (longer segments might contain more information)
-        # But not too long (rambling)
-        words = segment_text_lower.split()
-        if 10 <= len(words) <= 30:
-            score += 0.5
-        
-        # Score based on position in transcript (intro and conclusion often important)
-        if segment == request.segments[0] or segment == request.segments[-1]:
-            score += 0.5
-            
-        # Add segment to potential highlights with its score
-        highlights_with_scores.append({
-            "segment": segment,
-            "score": score
-        })
-    
-    # Step 3: Select the best highlights
-    # Sort by score (highest first)
-    highlights_with_scores.sort(key=lambda x: x["score"], reverse=True)
-    
-    # Take top segments or those with minimum score
-    min_score_to_include = 0.5  # Lower threshold to catch more potential highlights
-    detected_highlights = []
-    
-    # Always include at least 2 highlights if we have enough segments
-    min_highlights = min(2, len(request.segments))
-    
-    # Add top scoring segments
-    for item in highlights_with_scores:
-        if item["score"] >= min_score_to_include or len(detected_highlights) < min_highlights:
-            segment = item["segment"]
-            detected_highlights.append(
-                Highlight(
-                    text=segment.text, 
-                    start_time=segment.start_time, 
-                    end_time=segment.end_time, 
-                    score=float(item["score"])
-                )
-            )
-        
-        # Limit to reasonable number of highlights
-        if len(detected_highlights) >= 5:  # Cap at 5 highlights
-            break
-
-    return HighlightDetectionResponse(highlights=detected_highlights)
-
-
-# --- Caption Formatting Endpoint ---
+# --- Caption Formatting Functions ---
 def format_srt_time(seconds: float) -> str:
     """Converts seconds to SRT time format HH:MM:SS,mmm."""
     millis = int(round(seconds * 1000))
@@ -240,6 +137,7 @@ def break_text_into_lines(text: str, max_chars: int, max_lines: int) -> list[str
 
 @app.post("/format-captions", response_model=CaptionFormatResponse)
 async def format_captions_endpoint(request: CaptionFormatRequest):
+    """Format transcript segments into SRT format for video captions."""
     srt_blocks = []
     for i, segment in enumerate(request.segments):
         start_srt_time = format_srt_time(segment.start_time)
