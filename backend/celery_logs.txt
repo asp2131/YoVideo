@@ -3,10 +3,10 @@ INFO:app.tasks.transcription:Whisper model loaded successfully.
  
  -------------- celery@Supers-MacBook-Pro-5.local v5.4.0 (opalescent)
 --- ***** ----- 
--- ******* ---- macOS-15.1.1-arm64-arm-64bit-Mach-O 2025-06-14 13:05:03
+-- ******* ---- macOS-15.1.1-arm64-arm-64bit-Mach-O 2025-06-14 13:12:44
 - *** --- * --- 
 - ** ---------- [config]
-- ** ---------- .> app:         tasks:0x106ab38c0
+- ** ---------- .> app:         tasks:0x118eaf230
 - ** ---------- .> transport:   redis://localhost:6379/0
 - ** ---------- .> results:     redis://localhost:6379/0
 - *** --- * --- .> concurrency: 10 (prefork)
@@ -19,19 +19,48 @@ INFO:app.tasks.transcription:Whisper model loaded successfully.
 [tasks]
   . app.tasks.transcription.transcribe_video_task
 
-[2025-06-14 13:05:04,653: WARNING/MainProcess] /Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/celery/worker/consumer/consumer.py:508: CPendingDeprecationWarning: The broker_connection_retry configuration setting will no longer determine
+[2025-06-14 13:12:45,394: WARNING/MainProcess] /Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/celery/worker/consumer/consumer.py:508: CPendingDeprecationWarning: The broker_connection_retry configuration setting will no longer determine
 whether broker connection retries are made during startup in Celery 6.0 and above.
 If you wish to retain the existing behavior for retrying connections on startup,
 you should set broker_connection_retry_on_startup to True.
   warnings.warn(
 
-[2025-06-14 13:05:04,708: INFO/MainProcess] Connected to redis://localhost:6379/0
-[2025-06-14 13:05:04,709: WARNING/MainProcess] /Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/celery/worker/consumer/consumer.py:508: CPendingDeprecationWarning: The broker_connection_retry configuration setting will no longer determine
+[2025-06-14 13:12:45,440: INFO/MainProcess] Connected to redis://localhost:6379/0
+[2025-06-14 13:12:45,441: WARNING/MainProcess] /Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/celery/worker/consumer/consumer.py:508: CPendingDeprecationWarning: The broker_connection_retry configuration setting will no longer determine
 whether broker connection retries are made during startup in Celery 6.0 and above.
 If you wish to retain the existing behavior for retrying connections on startup,
 you should set broker_connection_retry_on_startup to True.
   warnings.warn(
 
-[2025-06-14 13:05:04,714: INFO/MainProcess] mingle: searching for neighbors
-[2025-06-14 13:05:05,760: INFO/MainProcess] mingle: all alone
-[2025-06-14 13:05:05,850: INFO/MainProcess] celery@Supers-MacBook-Pro-5.local ready.
+[2025-06-14 13:12:45,453: INFO/MainProcess] mingle: searching for neighbors
+[2025-06-14 13:12:46,485: INFO/MainProcess] mingle: all alone
+[2025-06-14 13:12:46,540: INFO/MainProcess] celery@Supers-MacBook-Pro-5.local ready.
+[2025-06-14 13:15:18,642: INFO/MainProcess] Task app.tasks.transcription.transcribe_video_task[40f68dd6-067d-41fe-8d8b-417add707dc6] received
+[2025-06-14 13:15:18,665: INFO/ForkPoolWorker-8] Starting transcription for project_id: c341ea73-74b3-4b01-9894-bff41828876e
+[2025-06-14 13:15:18,915: INFO/ForkPoolWorker-8] HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=video_path&id=eq.c341ea73-74b3-4b01-9894-bff41828876e "HTTP/2 200 OK"
+[2025-06-14 13:15:18,920: INFO/ForkPoolWorker-8] Downloading test_video.mp4 from Supabase Storage...
+[2025-06-14 13:15:19,354: INFO/ForkPoolWorker-8] HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/storage/v1/object/videos/test_video.mp4 "HTTP/2 400 Bad Request"
+[2025-06-14 13:15:19,355: ERROR/ForkPoolWorker-8] Error during transcription for project c341ea73-74b3-4b01-9894-bff41828876e: {'statusCode': 404, 'error': not_found, 'message': Object not found}
+Traceback (most recent call last):
+  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/storage3/_sync/file_api.py", line 53, in _request
+    response.raise_for_status()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_models.py", line 829, in raise_for_status
+    raise HTTPStatusError(message, request=request, response=self)
+httpx.HTTPStatusError: Client error '400 Bad Request' for url 'https://ghkowjxqwxsikrdivwxl.supabase.co/storage/v1/object/videos/test_video.mp4'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/akinpound/Documents/experiments/videothingy/backend/app/tasks/transcription.py", line 45, in transcribe_video_task
+  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/storage3/_sync/file_api.py", line 427, in download
+    response = self._request(
+        "GET",
+        f"{render_path}/{_path}{query_string}",
+    )
+  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/storage3/_sync/file_api.py", line 56, in _request
+    raise StorageApiError(resp["message"], resp["error"], resp["statusCode"])
+storage3.exceptions.StorageApiError: {'statusCode': 404, 'error': not_found, 'message': Object not found}
+[2025-06-14 13:15:19,556: INFO/ForkPoolWorker-8] HTTP Request: PATCH https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/processing_jobs?project_id=eq.c341ea73-74b3-4b01-9894-bff41828876e "HTTP/2 200 OK"
+[2025-06-14 13:15:19,593: INFO/ForkPoolWorker-8] Task app.tasks.transcription.transcribe_video_task[40f68dd6-067d-41fe-8d8b-417add707dc6] succeeded in 0.9482809999026358s: None

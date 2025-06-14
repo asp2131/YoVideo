@@ -33,9 +33,12 @@ async def start_transcription(request: TranscriptionRequest):
             "project_id": project_id,
             "job_type": "transcription",
             "status": "pending"
-        }).select("id").single().execute()
+        }).execute()
         
-        job_id = job_response.data.get("id")
+        if not job_response.data or len(job_response.data) == 0:
+            raise HTTPException(status_code=500, detail="Failed to create processing job.")
+        
+        job_id = job_response.data[0].get("id")
         if not job_id:
             raise HTTPException(status_code=500, detail="Failed to create processing job.")
 

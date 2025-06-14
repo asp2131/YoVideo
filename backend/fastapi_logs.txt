@@ -1,10 +1,52 @@
 INFO:     Will watch for changes in these directories: ['/Users/akinpound/Documents/experiments/videothingy/backend']
 INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
-INFO:     Started reloader process [93191] using WatchFiles
+INFO:     Started reloader process [95061] using WatchFiles
 INFO:app.tasks.transcription:Loading Whisper model...
 INFO:app.tasks.transcription:Whisper model loaded successfully.
-INFO:     Started server process [93193]
+INFO:     Started server process [95063]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
-INFO:     127.0.0.1:59021 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59016 - "GET / HTTP/1.1" 200 OK
+INFO:app.api.endpoints:Received transcription request for project_id: c341ea73-74b3-4b01-9894-bff41828876e
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=id&id=eq.c341ea73-74b3-4b01-9894-bff41828876e "HTTP/2 406 Not Acceptable"
+ERROR:app.api.endpoints:Failed to start transcription for project c341ea73-74b3-4b01-9894-bff41828876e: {'message': 'JSON object requested, multiple (or no) rows returned', 'code': 'PGRST116', 'hint': None, 'details': 'The result contains 0 rows'}
+Traceback (most recent call last):
+  File "/Users/akinpound/Documents/experiments/videothingy/backend/app/api/endpoints.py", line 27, in start_transcription
+    project_response = supabase.table("projects").select("id").eq("id", project_id).single().execute()
+  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/postgrest/_sync/request_builder.py", line 126, in execute
+    raise APIError(dict(json_obj))
+postgrest.exceptions.APIError: {'message': 'JSON object requested, multiple (or no) rows returned', 'code': 'PGRST116', 'hint': None, 'details': 'The result contains 0 rows'}
+INFO:     127.0.0.1:60170 - "POST /api/v1/transcribe HTTP/1.1" 500 Internal Server Error
+INFO:app.api.endpoints:Received transcription request for project_id: c341ea73-74b3-4b01-9894-bff41828876e
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=id&id=eq.c341ea73-74b3-4b01-9894-bff41828876e "HTTP/2 200 OK"
+ERROR:app.api.endpoints:Failed to start transcription for project c341ea73-74b3-4b01-9894-bff41828876e: 'SyncQueryRequestBuilder' object has no attribute 'select'
+Traceback (most recent call last):
+  File "/Users/akinpound/Documents/experiments/videothingy/backend/app/api/endpoints.py", line 36, in start_transcription
+    }).select("id").single().execute()
+       ^^^^^^
+AttributeError: 'SyncQueryRequestBuilder' object has no attribute 'select'
+INFO:     127.0.0.1:60335 - "POST /api/v1/transcribe HTTP/1.1" 500 Internal Server Error
+WARNING:  WatchFiles detected changes in 'app/api/endpoints.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [95063]
+INFO:app.tasks.transcription:Loading Whisper model...
+INFO:app.tasks.transcription:Whisper model loaded successfully.
+INFO:     Started server process [95814]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'app/tasks/transcription.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [95814]
+INFO:app.tasks.transcription:Loading Whisper model...
+INFO:app.tasks.transcription:Whisper model loaded successfully.
+INFO:     Started server process [95849]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:app.api.endpoints:Received transcription request for project_id: c341ea73-74b3-4b01-9894-bff41828876e
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=id&id=eq.c341ea73-74b3-4b01-9894-bff41828876e "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: POST https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/processing_jobs "HTTP/2 201 Created"
+INFO:app.api.endpoints:Queued transcription task for project_id: c341ea73-74b3-4b01-9894-bff41828876e, job_id: 478fdea8-b61c-413b-9eb9-3903ad8ffd25
+INFO:     127.0.0.1:60522 - "POST /api/v1/transcribe HTTP/1.1" 200 OK

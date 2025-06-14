@@ -33,8 +33,12 @@ def transcribe_video_task(self, project_id: str):
 
     try:
         # 1. Get video path from the projects table
-        project_response = supabase.table("projects").select("video_path").eq("id", project_id).single().execute()
-        video_path = project_response.data.get("video_path")
+        project_response = supabase.table("projects").select("video_path").eq("id", project_id).execute()
+        
+        if not project_response.data or len(project_response.data) == 0:
+            raise ValueError(f"No project found with id {project_id}")
+            
+        video_path = project_response.data[0].get("video_path")
 
         if not video_path:
             raise ValueError(f"No video_path found for project {project_id}")
