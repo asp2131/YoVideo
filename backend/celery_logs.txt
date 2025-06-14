@@ -1,0 +1,37 @@
+INFO:app.tasks.transcription:Loading Whisper model...
+INFO:app.tasks.transcription:Whisper model loaded successfully.
+ 
+ -------------- celery@Supers-MacBook-Pro-5.local v5.4.0 (opalescent)
+--- ***** ----- 
+-- ******* ---- macOS-15.1.1-arm64-arm-64bit-Mach-O 2025-06-14 13:05:03
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         tasks:0x106ab38c0
+- ** ---------- .> transport:   redis://localhost:6379/0
+- ** ---------- .> results:     redis://localhost:6379/0
+- *** --- * --- .> concurrency: 10 (prefork)
+-- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+--- ***** ----- 
+ -------------- [queues]
+                .> celery           exchange=celery(direct) key=celery
+                
+
+[tasks]
+  . app.tasks.transcription.transcribe_video_task
+
+[2025-06-14 13:05:04,653: WARNING/MainProcess] /Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/celery/worker/consumer/consumer.py:508: CPendingDeprecationWarning: The broker_connection_retry configuration setting will no longer determine
+whether broker connection retries are made during startup in Celery 6.0 and above.
+If you wish to retain the existing behavior for retrying connections on startup,
+you should set broker_connection_retry_on_startup to True.
+  warnings.warn(
+
+[2025-06-14 13:05:04,708: INFO/MainProcess] Connected to redis://localhost:6379/0
+[2025-06-14 13:05:04,709: WARNING/MainProcess] /Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/celery/worker/consumer/consumer.py:508: CPendingDeprecationWarning: The broker_connection_retry configuration setting will no longer determine
+whether broker connection retries are made during startup in Celery 6.0 and above.
+If you wish to retain the existing behavior for retrying connections on startup,
+you should set broker_connection_retry_on_startup to True.
+  warnings.warn(
+
+[2025-06-14 13:05:04,714: INFO/MainProcess] mingle: searching for neighbors
+[2025-06-14 13:05:05,760: INFO/MainProcess] mingle: all alone
+[2025-06-14 13:05:05,850: INFO/MainProcess] celery@Supers-MacBook-Pro-5.local ready.

@@ -9,8 +9,12 @@ celery==5.4.0
 redis==5.0.7
 
 # Video & AI Processing
-openai-whisper==20231117
+# openai-whisper from git to fix build issues
+git+https://github.com/openai/whisper.git
 ffmpeg-python==0.2.0
+
+# Supabase client
+supabase==2.15.3
 
 # Other dependencies
 requests==2.32.3
