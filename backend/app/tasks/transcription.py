@@ -6,7 +6,7 @@ import json
 from celery import current_task
 from app.core.celery_app import celery_app
 from app.services.supabase_client import supabase
-from app.services.caption_service import segments_to_srt, break_text_into_lines
+from app.services.caption_service import segments_to_ass
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -178,13 +178,14 @@ def transcribe_video_task(self, project_id: str):
             logger.error(f"Full result structure: {json.dumps(result, indent=2)}")
             raise Exception("Transcription produced no segments")
         
-        srt_content = segments_to_srt(segments)
-        logger.info(f"Generated SRT content length: {len(srt_content)}")
-        if len(srt_content) == 0:
-            logger.error("SRT content is empty despite having segments")
+        # Use ASS format for better animation capabilities
+        ass_content = segments_to_ass(segments)
+        logger.info(f"Generated ASS content length: {len(ass_content)}")
+        if len(ass_content) == 0:
+            logger.error("ASS content is empty despite having segments")
             logger.error(f"Segments data: {segments[:3]}")  # Log first 3 segments for debugging
-            raise Exception("Generated SRT content is empty")
-        logger.info(f"SRT content preview: {srt_content[:200]}...")
+            raise Exception("Generated ASS content is empty")
+        logger.info(f"ASS content preview: {ass_content[:400]}...")
         
         transcription_data = {
             "project_id": project_id,
@@ -193,7 +194,7 @@ def transcribe_video_task(self, project_id: str):
                 "segments": result["segments"],
                 "language": result.get("language", "en")
             },
-            "srt_content": srt_content
+            "srt_content": ass_content
         }
         
         supabase.table("transcriptions").insert(transcription_data).execute()
@@ -201,7 +202,7 @@ def transcribe_video_task(self, project_id: str):
 
         # 5. Generate video with caption overlay
         logger.info(f"Starting caption overlay for project {project_id}")
-        processed_video_path = generate_caption_overlay(project_id, tmp_video_file.name, srt_content)
+        processed_video_path = generate_caption_overlay(project_id, tmp_video_file.name, ass_content)
         
         if processed_video_path:
             logger.info(f"Caption overlay completed for project {project_id}")
@@ -239,39 +240,38 @@ def transcribe_video_task(self, project_id: str):
             os.unlink(tmp_video_file.name)
 
 
-def generate_caption_overlay(project_id: str, input_video_path: str, srt_content: str) -> str:
+def generate_caption_overlay(project_id: str, input_video_path: str, ass_content: str) -> str:
     """Generate a video with caption overlay using FFmpeg."""
-    srt_file_path = None
+    ass_file_path = None
     output_video_path = None
     
     try:
-        # Create temporary SRT file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.srt', delete=False) as srt_file:
-            srt_file.write(srt_content)
-            srt_file.flush()  # Ensure content is written
-            srt_file_path = srt_file.name
+        # Create temporary ASS file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.ass', delete=False) as ass_file:
+            ass_file.write(ass_content)
+            ass_file.flush()  # Ensure content is written
+            ass_file_path = ass_file.name
 
-        # Verify SRT file exists and is readable
-        if not os.path.exists(srt_file_path):
-            raise Exception(f"SRT file was not created: {srt_file_path}")
+        # Verify ASS file exists and is readable
+        if not os.path.exists(ass_file_path):
+            raise Exception(f"ASS file was not created: {ass_file_path}")
         
-        with open(srt_file_path, 'r') as f:
-            srt_check = f.read()
-            if not srt_check.strip():
-                raise Exception("SRT file is empty")
+        with open(ass_file_path, 'r') as f:
+            ass_check = f.read()
+            if not ass_check.strip():
+                raise Exception("ASS file is empty")
         
-        logger.info(f"Created SRT file: {srt_file_path} ({len(srt_content)} chars)")
+        logger.info(f"Created ASS file: {ass_file_path} ({len(ass_content)} chars)")
 
         # Create output video file
         with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as output_file:
             output_video_path = output_file.name
 
-        # FFmpeg command to overlay captions
-        # Using a simple white text with black outline for good visibility
+        # FFmpeg command to overlay captions using ASS format for animations
         ffmpeg_cmd = [
             'ffmpeg',
             '-i', input_video_path,
-            '-vf', f"subtitles={srt_file_path}:force_style='FontSize=16,PrimaryColour=&Hffffff,FontName=Oswald,Outline=0,Alignment=2'",
+            '-vf', f"ass={ass_file_path}",
             '-c:a', 'copy',  # Copy audio without re-encoding
             '-c:v', 'libx264',  # Use H.264 for video
             '-preset', 'medium',  # Balance between speed and quality
@@ -341,7 +341,7 @@ def generate_caption_overlay(project_id: str, input_video_path: str, srt_content
     
     finally:
         # Clean up temporary files
-        if 'srt_file_path' in locals() and os.path.exists(srt_file_path):
-            os.unlink(srt_file_path)
+        if 'ass_file_path' in locals() and os.path.exists(ass_file_path):
+            os.unlink(ass_file_path)
         if 'output_video_path' in locals() and output_video_path and os.path.exists(output_video_path):
             os.unlink(output_video_path)
