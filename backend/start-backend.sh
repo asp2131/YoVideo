@@ -31,7 +31,7 @@ echo "Celery worker started with PID: $CELERY_PID"
 echo "Starting FastAPI application..."
 
 # Start Uvicorn server
-./.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload > fastapi_logs.txt 2>&1 &
+./.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > fastapi_logs.txt 2>&1 &
 UVICORN_PID=$!
 echo "FastAPI app started with PID: $UVICORN_PID"
 

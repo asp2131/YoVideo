@@ -1,8 +1,8 @@
 // Simple script to check Supabase storage configuration
 const { createClient } = require('@supabase/supabase-js');
 
-const supabaseUrl = 'https://whwbduaefolbnfdrcfuo.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indod2JkdWFlZm9sYm5mZHJjZnVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcxNTU2MzQsImV4cCI6MjA2MjczMTYzNH0.dVMinX4X2mH_SVsGcokMHEGd1mDOb4pNO7o6wj_XLMU';
+const supabaseUrl = 'https://ghkowjxqwxsikrdivwxl.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdoa293anhxd3hzaWtyZGl2d3hsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0OTkyMjU2NSwiZXhwIjoyMDY1NDk4NTY1fQ.G4KrU8YJlAHZIoG8OyxKDxpx8FDU9yA-9jpvtePYZ3A';
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 

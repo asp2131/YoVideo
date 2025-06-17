@@ -1,5 +1,8 @@
 from pydantic import BaseModel
 
+class TranscriptionRequest(BaseModel):
+    project_id: str
+
 class TranscriptSegment(BaseModel):
     text: str
     start_time: float
