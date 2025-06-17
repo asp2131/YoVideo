@@ -15,7 +15,7 @@ import os
 from pathlib import Path
 
 # Configuration
-BASE_URL = "http://localhost:8001/api/v1"
+BASE_URL = "http://localhost:8000/api/v1"
 TEST_VIDEO_PATH = "test_video.mp4"  # You'll need to provide a test video
 
 def create_test_video():
@@ -69,9 +69,9 @@ def start_transcription(project_id):
     
     if response.status_code == 200:
         result = response.json()
-        task_id = result['task_id']
-        print(f"✅ Transcription started! Task ID: {task_id}")
-        return task_id
+        job_id = result['job_id']
+        print(f"✅ Transcription started! Job ID: {job_id}")
+        return job_id
     else:
         print(f"❌ Transcription start failed: {response.status_code} - {response.text}")
         return None
@@ -162,8 +162,8 @@ def main():
             return
         
         # Step 2: Start transcription
-        task_id = start_transcription(project_id)
-        if not task_id:
+        job_id = start_transcription(project_id)
+        if not job_id:
             return
         
         # Step 3: Monitor progress

@@ -2,36 +2,70 @@ import os
 import tempfile
 import logging
 import subprocess
-import whisper
+import json
 from celery import current_task
 from app.core.celery_app import celery_app
 from app.services.supabase_client import supabase
-from app.services.caption_service import format_srt_time, break_text_into_lines
+from app.services.caption_service import segments_to_srt, break_text_into_lines
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load Whisper model once when the worker starts
-try:
-    logger.info("Loading Whisper model...")
-    whisper_model = whisper.load_model("base")
-    logger.info("Whisper model loaded successfully.")
-except Exception as e:
-    logger.error(f"Failed to load Whisper model: {e}")
-    whisper_model = None
+def run_whisper_subprocess(video_path):
+    """Run whisper via subprocess to avoid memory issues."""
+    try:
+        # Set up environment with virtual environment PATH
+        env = os.environ.copy()
+        venv_bin = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.venv', 'bin')
+        env['PATH'] = f"{venv_bin}:{env.get('PATH', '')}"
+        
+        # Use whisper CLI with JSON output
+        cmd = [
+            'whisper', video_path,
+            '--model', 'tiny',
+            '--output_format', 'json',
+            '--output_dir', '/tmp',
+            '--fp16', 'False',
+            '--verbose', 'False'
+        ]
+        
+        logger.info(f"Running whisper command: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env)
+        
+        if result.returncode != 0:
+            logger.error(f"Whisper subprocess failed: {result.stderr}")
+            raise Exception(f"Whisper failed: {result.stderr}")
+        
+        # Read the JSON output
+        video_name = os.path.splitext(os.path.basename(video_path))[0]
+        json_path = f"/tmp/{video_name}.json"
+        
+        if not os.path.exists(json_path):
+            raise Exception(f"Whisper output file not found: {json_path}")
+        
+        with open(json_path, 'r') as f:
+            json_content = f.read()
+            logger.info(f"Raw JSON content from Whisper: {json_content[:500]}...")
+            whisper_result = json.loads(json_content)
+        
+        logger.info(f"Parsed Whisper result keys: {list(whisper_result.keys())}")
+        logger.info(f"Whisper segments count: {len(whisper_result.get('segments', []))}")
+        
+        # Clean up the JSON file
+        os.remove(json_path)
+        
+        return whisper_result
+        
+    except subprocess.TimeoutExpired:
+        logger.error("Whisper subprocess timed out")
+        raise Exception("Transcription timed out")
+    except Exception as e:
+        logger.error(f"Whisper subprocess error: {str(e)}")
+        raise
 
 @celery_app.task(bind=True)
 def transcribe_video_task(self, project_id: str):
-    if whisper_model is None:
-        logger.error("Whisper model is not available. Aborting task.")
-        # Update job status to 'failed'
-        supabase.table("processing_jobs").update({
-            "status": "failed",
-            "error_message": "Whisper model not loaded"
-        }).eq("project_id", project_id).execute()
-        return
-
     logger.info(f"Starting transcription for project_id: {project_id}")
 
     try:
@@ -53,19 +87,113 @@ def transcribe_video_task(self, project_id: str):
             tmp_video_file.write(video_data)
             tmp_video_file_path = tmp_video_file.name
             logger.info(f"Video downloaded to {tmp_video_file_path}")
+            
+            # Validate video file
+            file_size = os.path.getsize(tmp_video_file_path)
+            logger.info(f"Video file size: {file_size} bytes")
+            
+            if file_size == 0:
+                raise Exception("Downloaded video file is empty")
+            
+            # Check if file has audio using ffprobe
+            try:
+                ffprobe_cmd = [
+                    'ffprobe', '-v', 'quiet', '-select_streams', 'a:0', 
+                    '-show_entries', 'stream=codec_type', '-of', 'csv=p=0', 
+                    tmp_video_file_path
+                ]
+                result = subprocess.run(ffprobe_cmd, capture_output=True, text=True, timeout=30)
+                has_audio = result.stdout.strip() == 'audio'
+                logger.info(f"Video has audio track: {has_audio}")
+                
+                if not has_audio:
+                    logger.warning("Video file has no audio track - transcription will be empty")
+                    # Still proceed but with a warning
+                    
+            except Exception as probe_error:
+                logger.warning(f"Could not probe video file: {probe_error}")
+                # Continue anyway
 
         # 3. Transcribe the video file
         logger.info(f"Starting transcription for {tmp_video_file_path}...")
-        result = whisper_model.transcribe(tmp_video_file_path, fp16=False) # fp16=False for CPU
+        
+        # Update project status to processing
+        supabase.table("projects").update({
+            "status": "processing"
+        }).eq("id", project_id).execute()
+        
+        try:
+            # Run whisper via subprocess
+            result = run_whisper_subprocess(tmp_video_file_path)
+            
+            # Extract transcription text and segments
+            transcription_text = result["text"]
+            
+            logger.info("Transcription completed successfully")
+        except Exception as transcription_error:
+            logger.error(f"Whisper transcription failed: {str(transcription_error)}")
+            raise transcription_error
 
         # 4. Save transcription to database
-        transcription_text = result["text"]
-        srt_content = format_srt_time(result["segments"])
+        logger.info(f"Transcription result keys: {list(result.keys())}")
+        logger.info(f"Full transcription result: {result}")
+        logger.info(f"Number of segments: {len(result.get('segments', []))}")
+        if result.get('segments'):
+            logger.info(f"First segment: {result['segments'][0]}")
+        
+        segments = result.get("segments", [])
+        transcription_text = result.get("text", "").strip()
+        
+        if not segments and not transcription_text:
+            logger.warning("Whisper produced no segments or text - likely no audible speech in video")
+            # Create a minimal transcription entry to avoid breaking the workflow
+            transcription_data = {
+                "project_id": project_id,
+                "transcription_data": {
+                    "text": "",
+                    "segments": [],
+                    "language": result.get("language", "en")
+                },
+                "srt_content": ""
+            }
+            
+            supabase.table("transcriptions").insert(transcription_data).execute()
+            logger.info(f"Saved empty transcription to database for project {project_id}")
+            
+            # Update project status to completed (no caption overlay needed)
+            supabase.table("projects").update({
+                "status": "completed"
+            }).eq("id", project_id).execute()
+            
+            # Update processing job status to completed
+            supabase.table("processing_jobs").update({
+                "status": "completed"
+            }).eq("project_id", project_id).execute()
+            
+            logger.info(f"Transcription completed for project {project_id} (no speech detected)")
+            return
+        
+        if not segments:
+            logger.error("No segments found in transcription result")
+            logger.error(f"Full result structure: {json.dumps(result, indent=2)}")
+            raise Exception("Transcription produced no segments")
+        
+        srt_content = segments_to_srt(segments)
+        logger.info(f"Generated SRT content length: {len(srt_content)}")
+        if len(srt_content) == 0:
+            logger.error("SRT content is empty despite having segments")
+            logger.error(f"Segments data: {segments[:3]}")  # Log first 3 segments for debugging
+            raise Exception("Generated SRT content is empty")
+        logger.info(f"SRT content preview: {srt_content[:200]}...")
+        
         transcription_data = {
             "project_id": project_id,
-            "transcription_text": transcription_text,
-            "srt_content": srt_content,
-            "language": "en"  # Default to English for now
+            "transcription_data": {
+                "text": transcription_text,
+                "segments": result["segments"],
+                "language": result.get("language", "en")
+            },
+            "srt_content": srt_content
         }
         
         supabase.table("transcriptions").insert(transcription_data).execute()
@@ -113,11 +241,26 @@ def transcribe_video_task(self, project_id: str):
 
 def generate_caption_overlay(project_id: str, input_video_path: str, srt_content: str) -> str:
     """Generate a video with caption overlay using FFmpeg."""
+    srt_file_path = None
+    output_video_path = None
+    
     try:
         # Create temporary SRT file
         with tempfile.NamedTemporaryFile(mode='w', suffix='.srt', delete=False) as srt_file:
             srt_file.write(srt_content)
+            srt_file.flush()  # Ensure content is written
             srt_file_path = srt_file.name
+
+        # Verify SRT file exists and is readable
+        if not os.path.exists(srt_file_path):
+            raise Exception(f"SRT file was not created: {srt_file_path}")
+        
+        with open(srt_file_path, 'r') as f:
+            srt_check = f.read()
+            if not srt_check.strip():
+                raise Exception("SRT file is empty")
+        
+        logger.info(f"Created SRT file: {srt_file_path} ({len(srt_content)} chars)")
 
         # Create output video file
         with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as output_file:
@@ -139,17 +282,33 @@ def generate_caption_overlay(project_id: str, input_video_path: str, srt_content
 
         logger.info(f"Running FFmpeg command: {' '.join(ffmpeg_cmd)}")
         
-        # Run FFmpeg
-        result = subprocess.run(
+        # Update project status to indicate caption overlay is starting
+        supabase.table("projects").update({
+            "status": "adding_captions"
+        }).eq("id", project_id).execute()
+        
+        # Run FFmpeg with progress monitoring
+        process = subprocess.Popen(
             ffmpeg_cmd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=1800  # 30 minute timeout
+            universal_newlines=True
         )
-
-        if result.returncode != 0:
-            logger.error(f"FFmpeg failed: {result.stderr}")
-            raise Exception(f"FFmpeg processing failed: {result.stderr}")
+        
+        # Capture all output
+        stdout, stderr = process.communicate()
+        
+        logger.info(f"FFmpeg stdout: {stdout}")
+        logger.info(f"FFmpeg stderr: {stderr}")
+        
+        if process.returncode != 0:
+            logger.error(f"FFmpeg failed with return code {process.returncode}")
+            logger.error(f"FFmpeg stdout: {stdout}")
+            logger.error(f"FFmpeg stderr: {stderr}")
+            raise Exception(f"FFmpeg processing failed: {stderr}")
+        
+        logger.info("FFmpeg processing completed successfully")
 
         # Upload processed video to Supabase Storage
         processed_filename = f"processed_{project_id}.mp4"
@@ -184,5 +343,5 @@ def generate_caption_overlay(project_id: str, input_video_path: str, srt_content
         # Clean up temporary files
         if 'srt_file_path' in locals() and os.path.exists(srt_file_path):
             os.unlink(srt_file_path)
-        if 'output_video_path' in locals() and os.path.exists(output_video_path):
+        if 'output_video_path' in locals() and output_video_path and os.path.exists(output_video_path):
             os.unlink(output_video_path)

@@ -1,15 +1,15 @@
 INFO:app.tasks.transcription:Loading Whisper model...
-INFO:app.tasks.transcription:Whisper model loaded successfully.
+INFO:app.tasks.transcription:Whisper 'tiny' model loaded successfully.
  Supabase Client Debug:
    URL: https://ghkowjxqwxsikrdivwxl.supabase.co
    Key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzd...jpvtePYZ3A
  
  -------------- celery@Supers-MacBook-Pro-5.local v5.4.0 (opalescent)
 --- ***** ----- 
--- ******* ---- macOS-15.1.1-arm64-arm-64bit-Mach-O 2025-06-17 11:16:48
+-- ******* ---- macOS-15.1.1-arm64-arm-64bit-Mach-O 2025-06-17 11:50:50
 - *** --- * --- 
 - ** ---------- [config]
-- ** ---------- .> app:         tasks:0x102b53230
+- ** ---------- .> app:         tasks:0x104eaf230
 - ** ---------- .> transport:   redis://localhost:6379/0
 - ** ---------- .> results:     redis://localhost:6379/0
 - *** --- * --- .> concurrency: 10 (prefork)
@@ -22,24 +22,45 @@ INFO:app.tasks.transcription:Whisper model loaded successfully.
 [tasks]
   . app.tasks.transcription.transcribe_video_task
 
-[2025-06-17 11:16:49,266: WARNING/MainProcess] /Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/celery/worker/consumer/consumer.py:508: CPendingDeprecationWarning: The broker_connection_retry configuration setting will no longer determine
+[2025-06-17 11:50:51,812: WARNING/MainProcess] /Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/celery/worker/consumer/consumer.py:508: CPendingDeprecationWarning: The broker_connection_retry configuration setting will no longer determine
 whether broker connection retries are made during startup in Celery 6.0 and above.
 If you wish to retain the existing behavior for retrying connections on startup,
 you should set broker_connection_retry_on_startup to True.
   warnings.warn(
 
-[2025-06-17 11:16:49,312: INFO/MainProcess] Connected to redis://localhost:6379/0
-[2025-06-17 11:16:49,312: WARNING/MainProcess] /Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/celery/worker/consumer/consumer.py:508: CPendingDeprecationWarning: The broker_connection_retry configuration setting will no longer determine
+[2025-06-17 11:50:51,875: INFO/MainProcess] Connected to redis://localhost:6379/0
+[2025-06-17 11:50:51,876: WARNING/MainProcess] /Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/celery/worker/consumer/consumer.py:508: CPendingDeprecationWarning: The broker_connection_retry configuration setting will no longer determine
 whether broker connection retries are made during startup in Celery 6.0 and above.
 If you wish to retain the existing behavior for retrying connections on startup,
 you should set broker_connection_retry_on_startup to True.
   warnings.warn(
 
-[2025-06-17 11:16:49,322: INFO/MainProcess] mingle: searching for neighbors
-[2025-06-17 11:16:50,395: WARNING/MainProcess] /Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/celery/app/control.py:56: DuplicateNodenameWarning: Received multiple replies from node name: celery@Supers-MacBook-Pro-5.local.
-Please make sure you give each node a unique nodename using
-the celery worker `-n` option.
-  warnings.warn(DuplicateNodenameWarning(
+[2025-06-17 11:50:51,896: INFO/MainProcess] mingle: searching for neighbors
+[2025-06-17 11:50:52,927: INFO/MainProcess] mingle: all alone
+[2025-06-17 11:50:53,003: INFO/MainProcess] celery@Supers-MacBook-Pro-5.local ready.
+[2025-06-17 11:51:07,364: INFO/MainProcess] Task app.tasks.transcription.transcribe_video_task[4f8f8873-c274-49b6-a48c-6ca00ea3bd9d] received
+[2025-06-17 11:51:07,392: INFO/ForkPoolWorker-8] Starting transcription for project_id: 768a9831-4b75-4f87-9840-3f979ec9715e
+[2025-06-17 11:51:07,678: INFO/ForkPoolWorker-8] HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=video_path&id=eq.768a9831-4b75-4f87-9840-3f979ec9715e "HTTP/2 200 OK"
+[2025-06-17 11:51:07,717: INFO/ForkPoolWorker-8] Downloading d76b401d-c2e0-4d46-ac24-6ac0ed4370d7.mp4 from Supabase Storage...
+[2025-06-17 11:51:07,956: INFO/ForkPoolWorker-8] HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/storage/v1/object/videos/d76b401d-c2e0-4d46-ac24-6ac0ed4370d7.mp4 "HTTP/2 200 OK"
+[2025-06-17 11:51:08,722: INFO/ForkPoolWorker-8] Video downloaded to /var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpyp3gya_c.mp4
+[2025-06-17 11:51:08,723: INFO/ForkPoolWorker-8] Starting transcription for /var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpyp3gya_c.mp4...
+[2025-06-17 11:51:08,829: INFO/ForkPoolWorker-8] HTTP Request: PATCH https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?id=eq.768a9831-4b75-4f87-9840-3f979ec9715e "HTTP/2 200 OK"
+[2025-06-17 11:51:09,193: ERROR/MainProcess] Process 'ForkPoolWorker-8' pid:72131 exited with 'signal 11 (SIGSEGV)'
+[2025-06-17 11:51:09,216: ERROR/MainProcess] Task handler raised error: WorkerLostError('Worker exited prematurely: signal 11 (SIGSEGV) Job: 0.')
+Traceback (most recent call last):
+  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/billiard/pool.py", line 1265, in mark_as_worker_lost
+    raise WorkerLostError(
+    ...<2 lines>...
+    )
+billiard.einfo.ExceptionWithTraceback: 
+"""
+Traceback (most recent call last):
+  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/billiard/pool.py", line 1265, in mark_as_worker_lost
+    raise WorkerLostError(
+    ...<2 lines>...
+    )
+billiard.exceptions.WorkerLostError: Worker exited prematurely: signal 11 (SIGSEGV) Job: 0.
+"""
 
-[2025-06-17 11:16:50,395: INFO/MainProcess] mingle: all alone
-[2025-06-17 11:16:50,438: INFO/MainProcess] celery@Supers-MacBook-Pro-5.local ready.
+worker: Warm shutdown (MainProcess)
