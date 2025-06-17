@@ -15,4 +15,8 @@ celery_app = Celery(
 
 celery_app.conf.update(
     task_track_started=True,
+    task_time_limit=1800,  # 30 minutes hard timeout
+    task_soft_time_limit=1500,  # 25 minutes soft timeout
+    worker_prefetch_multiplier=1,  # Process one task at a time
+    broker_connection_retry_on_startup=True,
 )

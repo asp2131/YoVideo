@@ -271,7 +271,7 @@ def generate_caption_overlay(project_id: str, input_video_path: str, srt_content
         ffmpeg_cmd = [
             'ffmpeg',
             '-i', input_video_path,
-            '-vf', f"subtitles={srt_file_path}:force_style='FontSize=24,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2'",
+            '-vf', f"subtitles={srt_file_path}:force_style='FontSize=16,PrimaryColour=&Hffffff,FontName=Oswald,Outline=0,Alignment=2'",
             '-c:a', 'copy',  # Copy audio without re-encoding
             '-c:v', 'libx264',  # Use H.264 for video
             '-preset', 'medium',  # Balance between speed and quality
