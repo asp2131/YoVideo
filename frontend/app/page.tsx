@@ -32,7 +32,7 @@ export default function Home() {
   const fetchProjects = async () => {
     try {
       const response = await axios.get('/api/v1/projects')
-      setProjects(response.data)
+      setProjects(response.data.projects || [])  
       setLoading(false)
     } catch (error) {
       console.error('Error fetching projects:', error)
