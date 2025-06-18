@@ -24,7 +24,7 @@ def segments_to_srt(segments: list) -> str:
     return srt_content.strip()
 
 def segments_to_ass(segments: list) -> str:
-    """Converts whisper segments to ASS format with TikTok-style animations."""
+    """Converts whisper segments to ASS format with word-by-word timing synchronized to audio."""
     ass_header = """[Script Info]
 Title: TikTok-Style Video Captions
 ScriptType: v4.00+
@@ -33,7 +33,7 @@ PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Oswald Black,48,&Hffffff,&Hffffff,&H0,&H90000000,1,0,0,0,100,100,0,0,4,0,0,2,40,40,120,1
+Style: Default,Arial Black,72,&Hffffff,&Hffffff,&H0,&Hf0ffffff,1,0,0,0,100,100,0,0,3,0,2,2,80,80,200,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -41,30 +41,37 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     
     ass_content = ass_header
     
-    # Optimize segment timing for TikTok-style flow
-    optimized_segments = optimize_segment_timing(segments)
-    
-    for segment in optimized_segments:
-        start_time = format_ass_time(segment['start'])
-        end_time = format_ass_time(segment['end'])
-        text = segment['text'].strip()
+    # Use karaoke timing for word-by-word reveal
+    for segment in segments:
+        segment_start = segment['start']
+        segment_end = segment['end']
+        segment_text = segment['text'].strip()
         
-        # Break text into lines if it's too long
-        lines = break_text_into_lines(text, max_chars=50, max_lines=2)
-        text_formatted = '\\N'.join(lines)
+        if not segment_text:
+            continue
+            
+        # Create karaoke effect for progressive word reveal
+        words = segment_text.split()
+        if not words:
+            continue
+            
+        # Calculate timing per word within the segment
+        segment_duration = segment_end - segment_start
+        time_per_word = segment_duration / len(words)
         
-        # Check if text is long enough for word-by-word reveal
-        words = text.split()
-        segment_duration = segment['end'] - segment['start']
+        # Build karaoke timing string for word-by-word reveal
+        karaoke_text = ""
+        for word in words:
+            # Convert to centiseconds for ASS karaoke timing
+            word_duration_cs = int(time_per_word * 100)
+            karaoke_text += f"{{\\k{word_duration_cs}}}{word} "
         
-        if len(words) > 4 and segment_duration > 2.5:  # Use word reveal for medium+ segments
-            # Create word-by-word reveal effect with TikTok-style animation
-            word_reveal_text = create_tiktok_word_reveal(words, segment_duration)
-            # Add TikTok-style entrance animation with scale effect
-            animated_text = f"{{\\fade(255,0,0,255,0,150,150)\\t(0,300,\\fscx120\\fscy120)\\t(300,400,\\fscx100\\fscy100)}}{word_reveal_text}"
-        else:
-            # Use bouncy entrance for shorter segments
-            animated_text = f"{{\\fade(255,0,0,255,0,200,200)\\t(0,200,\\fscx110\\fscy110)\\t(200,300,\\fscx100\\fscy100)}}{text_formatted}"
+        # Add TikTok-style pop animation to the karaoke text
+        start_time = format_ass_time(segment_start)
+        end_time = format_ass_time(segment_end)
+        
+        # Combine pop animation with karaoke timing
+        animated_text = f"{{\\fade(255,0,0,255,0,100,100)\\t(0,150,\\fscx110\\fscy110)\\t(150,300,\\fscx100\\fscy100)}}{karaoke_text.strip()}"
         
         ass_content += f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{animated_text}\n"
     
@@ -101,6 +108,84 @@ def create_tiktok_word_reveal(words: list, duration: float) -> str:
         karaoke_text += f"{{\\k{int(time_per_word)}\\t(0,100,\\fscx105\\fscy105)\\t(100,200,\\fscx100\\fscy100)}}{word} "
     
     return karaoke_text.strip()
+
+def generate_word_level_timing(segments: list) -> list:
+    """Generates precise word-level timing from Whisper segments."""
+    all_word_timings = []
+    
+    for segment in segments:
+        words = segment['text'].strip().split()
+        if not words:
+            continue
+            
+        segment_duration = segment['end'] - segment['start']
+        
+        # Calculate timing per word (evenly distributed across segment)
+        time_per_word = segment_duration / len(words)
+        
+        for i, word in enumerate(words):
+            word_start = segment['start'] + (i * time_per_word)
+            word_end = segment['start'] + ((i + 1) * time_per_word)
+            
+            all_word_timings.append({
+                'word': word,
+                'start': word_start,
+                'end': word_end,
+                'segment_id': segment.get('id', 0),
+                'word_index': i
+            })
+    
+    return all_word_timings
+
+def build_progressive_text_display(current_word_timing: dict, all_word_timings: list) -> str:
+    """Builds progressive text display showing words as they're spoken with 3-4 second retention."""
+    current_time = current_word_timing['start']
+    retention_duration = 3.5  # 3.5 seconds retention
+    
+    # Find all words that should be visible at this time
+    visible_words = []
+    
+    for word_timing in all_word_timings:
+        word_start = word_timing['start']
+        word_age = current_time - word_start
+        
+        # Show word if:
+        # 1. It's the current word (word_start <= current_time < word_end)
+        # 2. It was spoken recently (within retention_duration)
+        # 3. It's not in the future
+        if (word_start <= current_time and 
+            word_age <= retention_duration and 
+            word_age >= 0):
+            
+            # Highlight current word differently
+            if word_timing == current_word_timing:
+                # Current word gets highlighted (make it stand out)
+                visible_words.append(f"{{\\c&Hffffff&}}{word_timing['word']}{{\\c&H000000&}}")
+            else:
+                # Previous words are shown normally but slightly faded
+                visible_words.append(f"{{\\alpha&H40&}}{word_timing['word']}{{\\alpha&H00&}}")
+    
+    # Format for display with proper line breaks
+    display_text = ' '.join(visible_words)
+    
+    # Break into lines if too long
+    if len(display_text) > 50:
+        words_for_lines = [w for w in visible_words]
+        lines = break_text_into_lines(' '.join([w.split('}')[-1].split('{')[0] for w in words_for_lines]), max_chars=50, max_lines=2)
+        # Rebuild with formatting preserved
+        formatted_lines = []
+        word_idx = 0
+        for line in lines:
+            line_words = line.split()
+            line_formatted = []
+            for _ in line_words:
+                if word_idx < len(visible_words):
+                    line_formatted.append(visible_words[word_idx])
+                    word_idx += 1
+            formatted_lines.append(' '.join(line_formatted))
+        display_text = '\\N'.join(formatted_lines)
+    
+    return display_text
 
 def optimize_segment_timing(segments: list) -> list:
     """Reduces gaps between segments for smoother TikTok-style flow."""
