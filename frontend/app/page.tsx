@@ -1,44 +1,27 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Upload, FileVideo, Download, Trash2, Play, Clock, CheckCircle, AlertCircle } from 'lucide-react'
 import axios from 'axios'
-
-interface Project {
-  id: string
-  filename: string
-  file_size: number
-  status: string
-  transcription?: any
-  processed_video_path?: string
-  created_at: string
-}
+import { useProjects, useDeleteProject, useUploadProject, type Project } from '../hooks/use-projects'
+import { useUploadStore } from '../store/upload-store'
 
 export default function Home() {
-  const [projects, setProjects] = useState<Project[]>([])
-  const [uploading, setUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [dragOver, setDragOver] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const { data: projectsData, isLoading: loading, error } = useProjects()
+  const deleteProjectMutation = useDeleteProject()
+  const uploadProjectMutation = useUploadProject()
+  const { 
+    uploading, 
+    uploadProgress, 
+    dragOver, 
+    setUploading, 
+    setUploadProgress, 
+    setDragOver, 
+    resetUpload 
+  } = useUploadStore()
+  
+  const projects = projectsData?.projects || []
 
-  // Fetch projects on component mount
-  useEffect(() => {
-    fetchProjects()
-    // Set up polling for project status updates
-    const interval = setInterval(fetchProjects, 3000)
-    return () => clearInterval(interval)
-  }, [])
-
-  const fetchProjects = async () => {
-    try {
-      const response = await axios.get('/api/v1/projects')
-      setProjects(response.data.projects || [])  
-      setLoading(false)
-    } catch (error) {
-      console.error('Error fetching projects:', error)
-      setLoading(false)
-    }
-  }
 
   const handleFileUpload = async (file: File) => {
     if (!file.type.startsWith('video/')) {
@@ -49,37 +32,19 @@ export default function Home() {
     setUploading(true)
     setUploadProgress(0)
 
-    const formData = new FormData()
-    formData.append('file', file)
-    // Generate a project name from the filename
-    const projectName = file.name.replace(/\.[^/.]+$/, '') // Remove file extension
-    formData.append('project_name', projectName)
+    const projectName = file.name.replace(/\.[^/.]+$/, '')
 
     try {
-      const response = await axios.post('/api/v1/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        onUploadProgress: (progressEvent) => {
-          if (progressEvent.total) {
-            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total)
-            setUploadProgress(progress)
-          }
-        },
+      await uploadProjectMutation.mutateAsync({
+        file,
+        projectName,
+        onProgress: setUploadProgress
       })
-
-      // Start transcription automatically
-      await axios.post('/api/v1/transcribe', {
-        project_id: response.data.project_id
-      })
-
-      fetchProjects()
     } catch (error) {
       console.error('Error uploading file:', error)
       alert('Error uploading file. Please try again.')
     } finally {
-      setUploading(false)
-      setUploadProgress(0)
+      resetUpload()
     }
   }
 
@@ -103,8 +68,7 @@ export default function Home() {
     if (!confirm('Are you sure you want to delete this project?')) return
 
     try {
-      await axios.delete(`/api/v1/projects/${projectId}`)
-      fetchProjects()
+      await deleteProjectMutation.mutateAsync(projectId)
     } catch (error) {
       console.error('Error deleting project:', error)
       alert('Error deleting project. Please try again.')

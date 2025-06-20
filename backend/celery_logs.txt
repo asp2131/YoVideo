@@ -2,12 +2,12 @@
    URL: https://ghkowjxqwxsikrdivwxl.supabase.co
    Key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzd...jpvtePYZ3A
  
- -------------- celery@Supers-MacBook-Pro-5.local v5.3.4 (emerald-rush)
+ -------------- celery@MacBookPro.attlocal.net v5.3.4 (emerald-rush)
 --- ***** ----- 
--- ******* ---- macOS-15.1.1-arm64-arm-64bit-Mach-O 2025-06-17 16:12:23
+-- ******* ---- macOS-15.1.1-arm64-arm-64bit-Mach-O 2025-06-20 11:46:46
 - *** --- * --- 
 - ** ---------- [config]
-- ** ---------- .> app:         tasks:0x1051ddbe0
+- ** ---------- .> app:         tasks:0x10625dbe0
 - ** ---------- .> transport:   redis://localhost:6379/0
 - ** ---------- .> results:     redis://localhost:6379/0
 - *** --- * --- .> concurrency: 10 (prefork)
@@ -20,31 +20,31 @@
 [tasks]
   . app.tasks.transcription.transcribe_video_task
 
-[2025-06-17 16:12:23,663: INFO/MainProcess] Connected to redis://localhost:6379/0
-[2025-06-17 16:12:23,684: INFO/MainProcess] mingle: searching for neighbors
-[2025-06-17 16:12:24,750: INFO/MainProcess] mingle: all alone
-[2025-06-17 16:12:24,820: INFO/MainProcess] celery@Supers-MacBook-Pro-5.local ready.
-[2025-06-17 16:12:41,458: INFO/MainProcess] Task app.tasks.transcription.transcribe_video_task[00025542-ff34-4d26-ac5d-76c5230996ba] received
-[2025-06-17 16:12:41,479: INFO/ForkPoolWorker-8] Starting transcription for project_id: c3dff9c7-a016-49e9-9fab-34dda0f0e971
-[2025-06-17 16:12:41,782: INFO/ForkPoolWorker-8] HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=video_path&id=eq.c3dff9c7-a016-49e9-9fab-34dda0f0e971 "HTTP/1.1 200 OK"
-[2025-06-17 16:12:41,786: INFO/ForkPoolWorker-8] Downloading a18dbc5d-e875-4458-a671-690eede2217b.mp4 from Supabase Storage...
-[2025-06-17 16:12:42,440: INFO/ForkPoolWorker-8] HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/storage/v1/object/videos/a18dbc5d-e875-4458-a671-690eede2217b.mp4 "HTTP/1.1 200 OK"
-[2025-06-17 16:12:43,034: INFO/ForkPoolWorker-8] Video downloaded to /var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmp7t0bvdet.mp4
-[2025-06-17 16:12:43,036: INFO/ForkPoolWorker-8] Video file size: 10932488 bytes
-[2025-06-17 16:12:43,311: INFO/ForkPoolWorker-8] Video has audio track: True
-[2025-06-17 16:12:43,313: INFO/ForkPoolWorker-8] Starting transcription for /var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmp7t0bvdet.mp4...
-[2025-06-17 16:12:43,585: INFO/ForkPoolWorker-8] HTTP Request: PATCH https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?id=eq.c3dff9c7-a016-49e9-9fab-34dda0f0e971 "HTTP/1.1 200 OK"
-[2025-06-17 16:12:43,669: INFO/ForkPoolWorker-8] Running whisper command: whisper /var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmp7t0bvdet.mp4 --model tiny --output_format json --output_dir /tmp --fp16 False --verbose False
-[2025-06-17 16:12:48,050: INFO/ForkPoolWorker-8] Raw JSON content from Whisper: {"text": " So we started digging, and that first we saw only saw one little potato, and Javan got really disappointed he left. So then I started digging a little bit more to the right, and man, did I find some potatoes?", "segments": [{"id": 0, "seek": 0, "start": 0.0, "end": 7.5200000000000005, "text": " So we started digging, and that first we saw only saw one little potato, and Javan got", "tokens": [50364, 407, 321, 1409, 17343, 11, 293, 300, 700, 321, 1866, 787, 1866, 472, 707, 7445, 11, 29...
-[2025-06-17 16:12:48,051: INFO/ForkPoolWorker-8] Parsed Whisper result keys: ['text', 'segments', 'language']
-[2025-06-17 16:12:48,051: INFO/ForkPoolWorker-8] Whisper segments count: 3
-[2025-06-17 16:12:48,051: INFO/ForkPoolWorker-8] Transcription completed successfully
-[2025-06-17 16:12:48,051: INFO/ForkPoolWorker-8] Transcription result keys: ['text', 'segments', 'language']
-[2025-06-17 16:12:48,052: INFO/ForkPoolWorker-8] Full transcription result: {'text': ' So we started digging, and that first we saw only saw one little potato, and Javan got really disappointed he left. So then I started digging a little bit more to the right, and man, did I find some potatoes?', 'segments': [{'id': 0, 'seek': 0, 'start': 0.0, 'end': 7.5200000000000005, 'text': ' So we started digging, and that first we saw only saw one little potato, and Javan got', 'tokens': [50364, 407, 321, 1409, 17343, 11, 293, 300, 700, 321, 1866, 787, 1866, 472, 707, 7445, 11, 293, 508, 21071, 658, 50740], 'temperature': 0.0, 'avg_logprob': -0.44841879385489003, 'compression_ratio': 1.5182481751824817, 'no_speech_prob': 0.008305512368679047}, {'id': 1, 'seek': 0, 'start': 7.5200000000000005, 'end': 14.88, 'text': ' really disappointed he left. So then I started digging a little bit more to the right, and man,', 'tokens': [50740, 534, 13856, 415, 1411, 13, 407, 550, 286, 1409, 17343, 257, 707, 857, 544, 281, 264, 558, 11, 293, 587, 11, 51108], 'temperature': 0.0, 'avg_logprob': -0.44841879385489003, 'compression_ratio': 1.5182481751824817, 'no_speech_prob': 0.008305512368679047}, {'id': 2, 'seek': 0, 'start': 15.68, 'end': 18.16, 'text': ' did I find some potatoes?', 'tokens': [51148, 630, 286, 915, 512, 11811, 30, 51272], 'temperature': 0.0, 'avg_logprob': -0.44841879385489003, 'compression_ratio': 1.5182481751824817, 'no_speech_prob': 0.008305512368679047}], 'language': 'en'}
-[2025-06-17 16:12:48,052: INFO/ForkPoolWorker-8] Number of segments: 3
-[2025-06-17 16:12:48,052: INFO/ForkPoolWorker-8] First segment: {'id': 0, 'seek': 0, 'start': 0.0, 'end': 7.5200000000000005, 'text': ' So we started digging, and that first we saw only saw one little potato, and Javan got', 'tokens': [50364, 407, 321, 1409, 17343, 11, 293, 300, 700, 321, 1866, 787, 1866, 472, 707, 7445, 11, 293, 508, 21071, 658, 50740], 'temperature': 0.0, 'avg_logprob': -0.44841879385489003, 'compression_ratio': 1.5182481751824817, 'no_speech_prob': 0.008305512368679047}
-[2025-06-17 16:12:48,053: INFO/ForkPoolWorker-8] Generated ASS content length: 3255
-[2025-06-17 16:12:48,053: INFO/ForkPoolWorker-8] ASS content preview: [Script Info]
+[2025-06-20 11:46:47,076: INFO/MainProcess] Connected to redis://localhost:6379/0
+[2025-06-20 11:46:47,084: INFO/MainProcess] mingle: searching for neighbors
+[2025-06-20 11:46:48,116: INFO/MainProcess] mingle: all alone
+[2025-06-20 11:46:48,181: INFO/MainProcess] celery@MacBookPro.attlocal.net ready.
+[2025-06-20 11:50:39,690: INFO/MainProcess] Task app.tasks.transcription.transcribe_video_task[cbfb2de1-775a-481b-8bbb-a64ed75e0782] received
+[2025-06-20 11:50:39,712: INFO/ForkPoolWorker-8] Starting transcription for project_id: 9037a331-8a85-419e-a734-2c7a777a33e5
+[2025-06-20 11:50:40,177: INFO/ForkPoolWorker-8] HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=video_path&id=eq.9037a331-8a85-419e-a734-2c7a777a33e5 "HTTP/1.1 200 OK"
+[2025-06-20 11:50:40,181: INFO/ForkPoolWorker-8] Downloading 814d3948-b98f-4e1b-bd2e-10b3fb0bc1cf.mp4 from Supabase Storage...
+[2025-06-20 11:50:40,959: INFO/ForkPoolWorker-8] HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/storage/v1/object/videos/814d3948-b98f-4e1b-bd2e-10b3fb0bc1cf.mp4 "HTTP/1.1 200 OK"
+[2025-06-20 11:50:41,636: INFO/ForkPoolWorker-8] Video downloaded to /var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpypmcw5jh.mp4
+[2025-06-20 11:50:41,636: INFO/ForkPoolWorker-8] Video file size: 10932488 bytes
+[2025-06-20 11:50:43,847: INFO/ForkPoolWorker-8] Video has audio track: True
+[2025-06-20 11:50:43,847: INFO/ForkPoolWorker-8] Starting transcription for /var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpypmcw5jh.mp4...
+[2025-06-20 11:50:44,058: INFO/ForkPoolWorker-8] HTTP Request: PATCH https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?id=eq.9037a331-8a85-419e-a734-2c7a777a33e5 "HTTP/1.1 200 OK"
+[2025-06-20 11:50:44,060: INFO/ForkPoolWorker-8] Running whisper command: whisper /var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpypmcw5jh.mp4 --model tiny --output_format json --output_dir /tmp --fp16 False --verbose False
+[2025-06-20 11:50:50,790: INFO/ForkPoolWorker-8] Raw JSON content from Whisper: {"text": " So we started digging, and that first we saw only saw one little potato, and Javan got really disappointed he left. So then I started digging a little bit more to the right, and man, did I find some potatoes?", "segments": [{"id": 0, "seek": 0, "start": 0.0, "end": 7.5200000000000005, "text": " So we started digging, and that first we saw only saw one little potato, and Javan got", "tokens": [50364, 407, 321, 1409, 17343, 11, 293, 300, 700, 321, 1866, 787, 1866, 472, 707, 7445, 11, 29...
+[2025-06-20 11:50:50,791: INFO/ForkPoolWorker-8] Parsed Whisper result keys: ['text', 'segments', 'language']
+[2025-06-20 11:50:50,791: INFO/ForkPoolWorker-8] Whisper segments count: 3
+[2025-06-20 11:50:50,792: INFO/ForkPoolWorker-8] Transcription completed successfully
+[2025-06-20 11:50:50,792: INFO/ForkPoolWorker-8] Transcription result keys: ['text', 'segments', 'language']
+[2025-06-20 11:50:50,792: INFO/ForkPoolWorker-8] Full transcription result: {'text': ' So we started digging, and that first we saw only saw one little potato, and Javan got really disappointed he left. So then I started digging a little bit more to the right, and man, did I find some potatoes?', 'segments': [{'id': 0, 'seek': 0, 'start': 0.0, 'end': 7.5200000000000005, 'text': ' So we started digging, and that first we saw only saw one little potato, and Javan got', 'tokens': [50364, 407, 321, 1409, 17343, 11, 293, 300, 700, 321, 1866, 787, 1866, 472, 707, 7445, 11, 293, 508, 21071, 658, 50740], 'temperature': 0.0, 'avg_logprob': -0.44841879385489003, 'compression_ratio': 1.5182481751824817, 'no_speech_prob': 0.008305512368679047}, {'id': 1, 'seek': 0, 'start': 7.5200000000000005, 'end': 14.88, 'text': ' really disappointed he left. So then I started digging a little bit more to the right, and man,', 'tokens': [50740, 534, 13856, 415, 1411, 13, 407, 550, 286, 1409, 17343, 257, 707, 857, 544, 281, 264, 558, 11, 293, 587, 11, 51108], 'temperature': 0.0, 'avg_logprob': -0.44841879385489003, 'compression_ratio': 1.5182481751824817, 'no_speech_prob': 0.008305512368679047}, {'id': 2, 'seek': 0, 'start': 15.68, 'end': 18.16, 'text': ' did I find some potatoes?', 'tokens': [51148, 630, 286, 915, 512, 11811, 30, 51272], 'temperature': 0.0, 'avg_logprob': -0.44841879385489003, 'compression_ratio': 1.5182481751824817, 'no_speech_prob': 0.008305512368679047}], 'language': 'en'}
+[2025-06-20 11:50:50,792: INFO/ForkPoolWorker-8] Number of segments: 3
+[2025-06-20 11:50:50,793: INFO/ForkPoolWorker-8] First segment: {'id': 0, 'seek': 0, 'start': 0.0, 'end': 7.5200000000000005, 'text': ' So we started digging, and that first we saw only saw one little potato, and Javan got', 'tokens': [50364, 407, 321, 1409, 17343, 11, 293, 300, 700, 321, 1866, 787, 1866, 472, 707, 7445, 11, 293, 508, 21071, 658, 50740], 'temperature': 0.0, 'avg_logprob': -0.44841879385489003, 'compression_ratio': 1.5182481751824817, 'no_speech_prob': 0.008305512368679047}
+[2025-06-20 11:50:50,793: INFO/ForkPoolWorker-8] Generated ASS content length: 1394
+[2025-06-20 11:50:50,793: INFO/ForkPoolWorker-8] ASS content preview: [Script Info]
 Title: TikTok-Style Video Captions
 ScriptType: v4.00+
 PlayResX: 1080
@@ -52,15 +52,15 @@ PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Oswald Black,48,&Hffffff,&Hffffff,&...
-[2025-06-17 16:12:48,167: INFO/ForkPoolWorker-8] HTTP Request: POST https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/transcriptions "HTTP/1.1 201 Created"
-[2025-06-17 16:12:48,168: INFO/ForkPoolWorker-8] Saved transcription to database for project c3dff9c7-a016-49e9-9fab-34dda0f0e971
-[2025-06-17 16:12:48,168: INFO/ForkPoolWorker-8] Starting caption overlay for project c3dff9c7-a016-49e9-9fab-34dda0f0e971
-[2025-06-17 16:12:48,169: INFO/ForkPoolWorker-8] Created ASS file: /var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpi6i4v83g.ass (3255 chars)
-[2025-06-17 16:12:48,170: INFO/ForkPoolWorker-8] Running FFmpeg command: ffmpeg -i /var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmp7t0bvdet.mp4 -vf ass=/var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpi6i4v83g.ass -c:a copy -c:v libx264 -preset medium -crf 23 -y /var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpxv5x6q0z.mp4
-[2025-06-17 16:12:48,388: INFO/ForkPoolWorker-8] HTTP Request: PATCH https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?id=eq.c3dff9c7-a016-49e9-9fab-34dda0f0e971 "HTTP/1.1 200 OK"
-[2025-06-17 16:12:53,023: INFO/ForkPoolWorker-8] FFmpeg stdout: 
-[2025-06-17 16:12:53,024: INFO/ForkPoolWorker-8] FFmpeg stderr: ffmpeg version 7.1.1 Copyright (c) 2000-2025 the FFmpeg developers
+Style: Default,Arial Black,72,&Hffffff,&Hffffff,&H...
+[2025-06-20 11:50:51,040: INFO/ForkPoolWorker-8] HTTP Request: POST https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/transcriptions "HTTP/1.1 201 Created"
+[2025-06-20 11:50:51,042: INFO/ForkPoolWorker-8] Saved transcription to database for project 9037a331-8a85-419e-a734-2c7a777a33e5
+[2025-06-20 11:50:51,042: INFO/ForkPoolWorker-8] Starting caption overlay for project 9037a331-8a85-419e-a734-2c7a777a33e5
+[2025-06-20 11:50:51,044: INFO/ForkPoolWorker-8] Created ASS file: /var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpegocy0ax.ass (1394 chars)
+[2025-06-20 11:50:51,045: INFO/ForkPoolWorker-8] Running FFmpeg command: ffmpeg -i /var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpypmcw5jh.mp4 -vf ass=/var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpegocy0ax.ass -c:a copy -c:v libx264 -preset medium -crf 23 -y /var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpqd1r0ky0.mp4
+[2025-06-20 11:50:51,166: INFO/ForkPoolWorker-8] HTTP Request: PATCH https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?id=eq.9037a331-8a85-419e-a734-2c7a777a33e5 "HTTP/1.1 200 OK"
+[2025-06-20 11:50:55,478: INFO/ForkPoolWorker-8] FFmpeg stdout: 
+[2025-06-20 11:50:55,478: INFO/ForkPoolWorker-8] FFmpeg stderr: ffmpeg version 7.1.1 Copyright (c) 2000-2025 the FFmpeg developers
   built with Apple clang version 16.0.0 (clang-1600.0.26.6)
   configuration: --prefix=/opt/homebrew/Cellar/ffmpeg/7.1.1_2 --enable-shared --enable-pthreads --enable-version3 --cc=clang --host-cflags= --host-ldflags='-Wl,-ld_classic' --enable-ffplay --enable-gnutls --enable-gpl --enable-libaom --enable-libaribb24 --enable-libbluray --enable-libdav1d --enable-libharfbuzz --enable-libjxl --enable-libmp3lame --enable-libopus --enable-librav1e --enable-librist --enable-librubberband --enable-libsnappy --enable-libsrt --enable-libssh --enable-libsvtav1 --enable-libtesseract --enable-libtheora --enable-libvidstab --enable-libvmaf --enable-libvorbis --enable-libvpx --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxml2 --enable-libxvid --enable-lzma --enable-libfontconfig --enable-libfreetype --enable-frei0r --enable-libass --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-libopenjpeg --enable-libspeex --enable-libsoxr --enable-libzmq --enable-libzimg --disable-libjack --disable-indev=jack --enable-videotoolbox --enable-audiotoolbox --enable-neon
   libavutil      59. 39.100 / 59. 39.100
@@ -71,7 +71,7 @@ Style: Default,Oswald Black,48,&Hffffff,&Hffffff,&...
   libswscale      8.  3.100 /  8.  3.100
   libswresample   5.  3.100 /  5.  3.100
   libpostproc    58.  3.100 / 58.  3.100
-Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '/var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmp7t0bvdet.mp4':
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '/var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpypmcw5jh.mp4':
   Metadata:
     major_brand     : mp42
     minor_version   : 0
@@ -91,25 +91,25 @@ Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '/var/folders/vh/2k15dtzx66l3r__n7mtz07f
         creation_time   : 2025-05-24T00:29:23.000000Z
         handler_name    : SoundHandle
         vendor_id       : [0][0][0][0]
-[Parsed_ass_0 @ 0x1449051f0] libass API version: 0x1703000
-[Parsed_ass_0 @ 0x1449051f0] libass source: tarball: 0.17.3
-[Parsed_ass_0 @ 0x1449051f0] Shaper: FriBidi 1.0.15 (SIMPLE) HarfBuzz-ng 11.2.1 (COMPLEX)
-[Parsed_ass_0 @ 0x1449051f0] Using font provider coretext
-[Parsed_ass_0 @ 0x1449051f0] Added subtitle file: '/var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpi6i4v83g.ass' (2 styles, 3 events)
+[Parsed_ass_0 @ 0x14e713df0] libass API version: 0x1703000
+[Parsed_ass_0 @ 0x14e713df0] libass source: tarball: 0.17.3
+[Parsed_ass_0 @ 0x14e713df0] Shaper: FriBidi 1.0.15 (SIMPLE) HarfBuzz-ng 11.2.1 (COMPLEX)
+[Parsed_ass_0 @ 0x14e713df0] Using font provider coretext
+[Parsed_ass_0 @ 0x14e713df0] Added subtitle file: '/var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpegocy0ax.ass' (2 styles, 3 events)
 Stream mapping:
   Stream #0:0 -> #0:0 (h264 (native) -> h264 (libx264))
   Stream #0:1 -> #0:1 (copy)
 Press [q] to stop, [?] for help
-[Parsed_ass_0 @ 0x14482fb40] libass API version: 0x1703000
-[Parsed_ass_0 @ 0x14482fb40] libass source: tarball: 0.17.3
-[Parsed_ass_0 @ 0x14482fb40] Shaper: FriBidi 1.0.15 (SIMPLE) HarfBuzz-ng 11.2.1 (COMPLEX)
-[Parsed_ass_0 @ 0x14482fb40] Using font provider coretext
-[Parsed_ass_0 @ 0x14482fb40] Added subtitle file: '/var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpi6i4v83g.ass' (2 styles, 3 events)
-[Parsed_ass_0 @ 0x14482fb40] fontselect: (Oswald Black, 700, 0) -> /System/Library/Fonts/Helvetica.ttc, -1, Helvetica-Bold
-[libx264 @ 0x143e0e650] using cpu capabilities: ARMv8 NEON
-[libx264 @ 0x143e0e650] profile High, level 3.2, 4:2:0, 8-bit
-[libx264 @ 0x143e0e650] 264 - core 164 r3108 31e19f9 - H.264/MPEG-4 AVC codec - Copyleft 2003-2023 - http://www.videolan.org/x264.html - options: cabac=1 ref=3 deblock=1:0:0 analyse=0x3:0x113 me=hex subme=7 psy=1 psy_rd=1.00:0.00 mixed_ref=1 me_range=16 chroma_me=1 trellis=1 8x8dct=1 cqm=0 deadzone=21,11 fast_pskip=1 chroma_qp_offset=-2 threads=15 lookahead_threads=2 sliced_threads=0 nr=0 decimate=1 interlaced=0 bluray_compat=0 constrained_intra=0 bframes=3 b_pyramid=2 b_adapt=1 b_bias=0 direct=1 weightb=1 open_gop=0 weightp=2 keyint=250 keyint_min=25 scenecut=40 intra_refresh=0 rc_lookahead=40 rc=crf mbtree=1 crf=23.0 qcomp=0.60 qpmin=0 qpmax=69 qpstep=4 ip_ratio=1.40 aq=1:1.00
-Output #0, mp4, to '/var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpxv5x6q0z.mp4':
+[Parsed_ass_0 @ 0x12e607e60] libass API version: 0x1703000
+[Parsed_ass_0 @ 0x12e607e60] libass source: tarball: 0.17.3
+[Parsed_ass_0 @ 0x12e607e60] Shaper: FriBidi 1.0.15 (SIMPLE) HarfBuzz-ng 11.2.1 (COMPLEX)
+[Parsed_ass_0 @ 0x12e607e60] Using font provider coretext
+[Parsed_ass_0 @ 0x12e607e60] Added subtitle file: '/var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpegocy0ax.ass' (2 styles, 3 events)
+[Parsed_ass_0 @ 0x12e607e60] fontselect: (Arial Black, 700, 0) -> /System/Library/Fonts/Supplemental/Arial Black.ttf, -1, Arial-Black
+[libx264 @ 0x14e713130] using cpu capabilities: ARMv8 NEON
+[libx264 @ 0x14e713130] profile High, level 3.2, 4:2:0, 8-bit
+[libx264 @ 0x14e713130] 264 - core 164 r3108 31e19f9 - H.264/MPEG-4 AVC codec - Copyleft 2003-2023 - http://www.videolan.org/x264.html - options: cabac=1 ref=3 deblock=1:0:0 analyse=0x3:0x113 me=hex subme=7 psy=1 psy_rd=1.00:0.00 mixed_ref=1 me_range=16 chroma_me=1 trellis=1 8x8dct=1 cqm=0 deadzone=21,11 fast_pskip=1 chroma_qp_offset=-2 threads=15 lookahead_threads=2 sliced_threads=0 nr=0 decimate=1 interlaced=0 bluray_compat=0 constrained_intra=0 bframes=3 b_pyramid=2 b_adapt=1 b_bias=0 direct=1 weightb=1 open_gop=0 weightp=2 keyint=250 keyint_min=25 scenecut=40 intra_refresh=0 rc_lookahead=40 rc=crf mbtree=1 crf=23.0 qcomp=0.60 qpmin=0 qpmax=69 qpstep=4 ip_ratio=1.40 aq=1:1.00
+Output #0, mp4, to '/var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpqd1r0ky0.mp4':
   Metadata:
     major_brand     : mp42
     minor_version   : 0
@@ -129,470 +129,41 @@ Output #0, mp4, to '/var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpxv5x6q0z
         creation_time   : 2025-05-24T00:29:23.000000Z
         handler_name    : SoundHandle
         vendor_id       : [0][0][0][0]
-frame=   29 fps=0.0 q=29.0 size=    1024KiB time=00:00:00.88 bitrate=9497.0kbits/s speed=1.76x    
-frame=   90 fps= 90 q=29.0 size=    3072KiB time=00:00:02.91 bitrate=8628.4kbits/s speed=2.91x    
-frame=  154 fps=102 q=29.0 size=    4864KiB time=00:00:05.05 bitrate=7890.4kbits/s speed=3.35x    
-frame=  237 fps=118 q=29.0 size=    6144KiB time=00:00:07.81 bitrate=6439.1kbits/s speed=3.89x    
-frame=  302 fps=120 q=29.0 size=    7680KiB time=00:00:09.98 bitrate=6302.0kbits/s speed=3.97x    
-frame=  361 fps=119 q=29.0 size=    9472KiB time=00:00:11.98 bitrate=6475.2kbits/s speed=3.97x    
-frame=  430 fps=122 q=29.0 size=   11520KiB time=00:00:14.25 bitrate=6622.6kbits/s speed=4.04x    
-frame=  513 fps=127 q=29.0 size=   13312KiB time=00:00:17.01 bitrate=6408.6kbits/s speed=4.22x    
-[out#0/mp4 @ 0x143e0d7c0] video:14135KiB audio:636KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.148067%
-frame=  612 fps=136 q=-1.0 Lsize=   14793KiB time=00:00:20.31 bitrate=5964.8kbits/s speed=4.53x    
-[libx264 @ 0x143e0e650] frame I:3     Avg QP:22.63  size:105398
-[libx264 @ 0x143e0e650] frame P:349   Avg QP:26.09  size: 32762
-[libx264 @ 0x143e0e650] frame B:260   Avg QP:28.67  size: 10474
-[libx264 @ 0x143e0e650] consecutive B-frames: 37.3% 13.1% 15.7% 34.0%
-[libx264 @ 0x143e0e650] mb I  I16..4: 11.8% 71.7% 16.4%
-[libx264 @ 0x143e0e650] mb P  I16..4:  2.2% 10.7%  1.1%  P16..4: 45.7% 19.2% 11.6%  0.0%  0.0%    skip: 9.5%
-[libx264 @ 0x143e0e650] mb B  I16..4:  0.5%  1.5%  0.1%  B16..8: 49.0% 10.3%  3.4%  direct: 3.7%  skip:31.6%  L0:54.4% L1:30.6% BI:15.0%
-[libx264 @ 0x143e0e650] 8x8 transform intra:75.9% inter:82.6%
-[libx264 @ 0x143e0e650] coded y,uvDC,uvAC intra: 57.7% 71.3% 16.7% inter: 31.7% 18.8% 1.9%
-[libx264 @ 0x143e0e650] i16 v,h,dc,p: 44% 28% 11% 17%
-[libx264 @ 0x143e0e650] i8 v,h,dc,ddl,ddr,vr,hd,vl,hu: 24% 15% 22%  5%  6%  7%  7%  7%  7%
-[libx264 @ 0x143e0e650] i4 v,h,dc,ddl,ddr,vr,hd,vl,hu: 19% 16% 14%  7% 10%  9% 10%  8%  7%
-[libx264 @ 0x143e0e650] i8c dc,h,v,p: 48% 20% 25%  7%
-[libx264 @ 0x143e0e650] Weighted P-Frames: Y:8.0% UV:4.0%
-[libx264 @ 0x143e0e650] ref P L0: 74.0% 20.1%  4.2%  1.6%  0.1%
-[libx264 @ 0x143e0e650] ref B L0: 97.6%  1.9%  0.4%
-[libx264 @ 0x143e0e650] ref B L1: 99.2%  0.8%
-[libx264 @ 0x143e0e650] kb/s:5680.55
+frame=   39 fps=0.0 q=29.0 size=    1280KiB time=00:00:01.21 bitrate=8618.7kbits/s speed=2.41x    
+frame=   97 fps= 96 q=29.0 size=    3328KiB time=00:00:03.15 bitrate=8655.0kbits/s speed=3.12x    
+frame=  169 fps=112 q=29.0 size=    5376KiB time=00:00:05.55 bitrate=7935.2kbits/s speed=3.68x    
+frame=  252 fps=125 q=29.0 size=    6656KiB time=00:00:08.31 bitrate=6556.3kbits/s speed=4.13x    
+frame=  325 fps=129 q=29.0 size=    8960KiB time=00:00:10.75 bitrate=6828.0kbits/s speed=4.27x    
+frame=  390 fps=129 q=29.0 size=   11008KiB time=00:00:12.91 bitrate=6981.5kbits/s speed=4.27x    
+frame=  461 fps=131 q=29.0 size=   13056KiB time=00:00:15.28 bitrate=6998.2kbits/s speed=4.34x    
+frame=  559 fps=139 q=29.0 size=   14848KiB time=00:00:18.55 bitrate=6557.2kbits/s speed= 4.6x    
+[out#0/mp4 @ 0x14e705780] video:14946KiB audio:636KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.143671%
+frame=  612 fps=146 q=-1.0 Lsize=   15604KiB time=00:00:20.31 bitrate=6291.9kbits/s speed=4.84x    
+[libx264 @ 0x14e713130] frame I:3     Avg QP:22.64  size:105141
+[libx264 @ 0x14e713130] frame P:292   Avg QP:26.11  size: 37996
+[libx264 @ 0x14e713130] frame B:317   Avg QP:28.75  size: 12283
+[libx264 @ 0x14e713130] consecutive B-frames: 25.5% 11.1% 15.7% 47.7%
+[libx264 @ 0x14e713130] mb I  I16..4: 13.9% 69.1% 17.1%
+[libx264 @ 0x14e713130] mb P  I16..4:  2.6% 12.8%  1.9%  P16..4: 42.2% 20.6% 12.4%  0.0%  0.0%    skip: 7.6%
+[libx264 @ 0x14e713130] mb B  I16..4:  0.4%  1.4%  0.2%  B16..8: 48.1% 11.4%  4.1%  direct: 3.8%  skip:30.6%  L0:52.8% L1:31.5% BI:15.7%
+[libx264 @ 0x14e713130] 8x8 transform intra:73.5% inter:78.6%
+[libx264 @ 0x14e713130] coded y,uvDC,uvAC intra: 60.3% 71.6% 18.5% inter: 31.9% 19.2% 2.0%
+[libx264 @ 0x14e713130] i16 v,h,dc,p: 45% 28% 11% 16%
+[libx264 @ 0x14e713130] i8 v,h,dc,ddl,ddr,vr,hd,vl,hu: 23% 15% 22%  5%  6%  8%  7%  7%  7%
+[libx264 @ 0x14e713130] i4 v,h,dc,ddl,ddr,vr,hd,vl,hu: 20% 17% 13%  7% 10%  9% 10%  7%  8%
+[libx264 @ 0x14e713130] i8c dc,h,v,p: 49% 20% 24%  7%
+[libx264 @ 0x14e713130] Weighted P-Frames: Y:13.0% UV:5.1%
+[libx264 @ 0x14e713130] ref P L0: 72.1% 19.8%  5.9%  1.9%  0.3%
+[libx264 @ 0x14e713130] ref B L0: 97.2%  2.2%  0.6%
+[libx264 @ 0x14e713130] ref B L1: 99.3%  0.7%
+[libx264 @ 0x14e713130] kb/s:6006.45
 
-[2025-06-17 16:12:53,024: INFO/ForkPoolWorker-8] FFmpeg processing completed successfully
-[2025-06-17 16:13:00,426: ERROR/ForkPoolWorker-8] Caption overlay failed for project c3dff9c7-a016-49e9-9fab-34dda0f0e971: [Errno 32] Broken pipe
-[2025-06-17 16:13:00,429: ERROR/ForkPoolWorker-8] Transcription failed for project c3dff9c7-a016-49e9-9fab-34dda0f0e971: [Errno 32] Broken pipe
-Traceback (most recent call last):
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_exceptions.py", line 10, in map_exceptions
-    yield
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_backends/sync.py", line 38, in write
-    n = self._sock.send(buffer)
-  File "/opt/homebrew/Cellar/python@3.13/3.13.3_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/ssl.py", line 1232, in send
-    return self._sslobj.write(data)
-           ~~~~~~~~~~~~~~~~~~^^^^^^
-BrokenPipeError: [Errno 32] Broken pipe
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 60, in map_httpcore_exceptions
-    yield
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 218, in handle_request
-    resp = self._pool.handle_request(req)
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_sync/connection_pool.py", line 262, in handle_request
-    raise exc
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_sync/connection_pool.py", line 245, in handle_request
-    response = connection.handle_request(request)
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_sync/connection.py", line 96, in handle_request
-    return self._connection.handle_request(request)
-           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_sync/http11.py", line 121, in handle_request
-    raise exc
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_sync/http11.py", line 90, in handle_request
-    self._send_request_body(**kwargs)
-    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_sync/http11.py", line 144, in _send_request_body
-    self._send_event(event, timeout=timeout)
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_sync/http11.py", line 153, in _send_event
-    self._network_stream.write(bytes_to_send, timeout=timeout)
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_backends/sync.py", line 35, in write
-    with map_exceptions(exc_map):
-         ~~~~~~~~~~~~~~^^^^^^^^^
-  File "/opt/homebrew/Cellar/python@3.13/3.13.3_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py", line 162, in __exit__
-    self.gen.throw(value)
-    ~~~~~~~~~~~~~~^^^^^^^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
-    raise to_exc(exc) from exc
-httpcore.WriteError: [Errno 32] Broken pipe
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/app/tasks/transcription.py", line 205, in transcribe_video_task
-    processed_video_path = generate_caption_overlay(project_id, tmp_video_file.name, ass_content)
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/app/tasks/transcription.py", line 340, in generate_caption_overlay
-    raise e
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/app/tasks/transcription.py", line 319, in generate_caption_overlay
-    storage_response = supabase.storage.from_("videos").upload(
-        processed_filename,
-        video_data,
-        file_options={"content-type": "video/mp4"}
-    )
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/storage3/_sync/file_api.py", line 398, in upload
-    return self._request(
-           ~~~~~~~~~~~~~^
-        "POST", f"/object/{_path}", files=files, headers=headers, data=_data
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/storage3/_sync/file_api.py", line 42, in _request
-    response = self._client.request(
-        method, url, headers=headers or {}, json=json, files=files, **kwargs
-    )
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_client.py", line 814, in request
-    return self.send(request, auth=auth, follow_redirects=follow_redirects)
-           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_client.py", line 901, in send
-    response = self._send_handling_auth(
-        request,
-    ...<2 lines>...
-        history=[],
-    )
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_client.py", line 929, in _send_handling_auth
-    response = self._send_handling_redirects(
-        request,
-        follow_redirects=follow_redirects,
-        history=history,
-    )
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_client.py", line 966, in _send_handling_redirects
-    response = self._send_single_request(request)
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1002, in _send_single_request
-    response = transport.handle_request(request)
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 217, in handle_request
-    with map_httpcore_exceptions():
-         ~~~~~~~~~~~~~~~~~~~~~~~^^
-  File "/opt/homebrew/Cellar/python@3.13/3.13.3_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py", line 162, in __exit__
-    self.gen.throw(value)
-    ~~~~~~~~~~~~~~^^^^^^^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 77, in map_httpcore_exceptions
-    raise mapped_exc(message) from exc
-httpx.WriteError: [Errno 32] Broken pipe
-[2025-06-17 16:13:00,544: ERROR/ForkPoolWorker-8] Task app.tasks.transcription.transcribe_video_task[00025542-ff34-4d26-ac5d-76c5230996ba] raised unexpected: ConnectError('[Errno 8] nodename nor servname provided, or not known')
-Traceback (most recent call last):
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_exceptions.py", line 10, in map_exceptions
-    yield
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_backends/sync.py", line 38, in write
-    n = self._sock.send(buffer)
-  File "/opt/homebrew/Cellar/python@3.13/3.13.3_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/ssl.py", line 1232, in send
-    return self._sslobj.write(data)
-           ~~~~~~~~~~~~~~~~~~^^^^^^
-BrokenPipeError: [Errno 32] Broken pipe
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 60, in map_httpcore_exceptions
-    yield
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 218, in handle_request
-    resp = self._pool.handle_request(req)
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_sync/connection_pool.py", line 262, in handle_request
-    raise exc
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_sync/connection_pool.py", line 245, in handle_request
-    response = connection.handle_request(request)
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_sync/connection.py", line 96, in handle_request
-    return self._connection.handle_request(request)
-           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_sync/http11.py", line 121, in handle_request
-    raise exc
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_sync/http11.py", line 90, in handle_request
-    self._send_request_body(**kwargs)
-    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_sync/http11.py", line 144, in _send_request_body
-    self._send_event(event, timeout=timeout)
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_sync/http11.py", line 153, in _send_event
-    self._network_stream.write(bytes_to_send, timeout=timeout)
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_backends/sync.py", line 35, in write
-    with map_exceptions(exc_map):
-         ~~~~~~~~~~~~~~^^^^^^^^^
-  File "/opt/homebrew/Cellar/python@3.13/3.13.3_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py", line 162, in __exit__
-    self.gen.throw(value)
-    ~~~~~~~~~~~~~~^^^^^^^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
-    raise to_exc(exc) from exc
-httpcore.WriteError: [Errno 32] Broken pipe
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/app/tasks/transcription.py", line 205, in transcribe_video_task
-    processed_video_path = generate_caption_overlay(project_id, tmp_video_file.name, ass_content)
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/app/tasks/transcription.py", line 340, in generate_caption_overlay
-    raise e
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/app/tasks/transcription.py", line 319, in generate_caption_overlay
-    storage_response = supabase.storage.from_("videos").upload(
-        processed_filename,
-        video_data,
-        file_options={"content-type": "video/mp4"}
-    )
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/storage3/_sync/file_api.py", line 398, in upload
-    return self._request(
-           ~~~~~~~~~~~~~^
-        "POST", f"/object/{_path}", files=files, headers=headers, data=_data
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/storage3/_sync/file_api.py", line 42, in _request
-    response = self._client.request(
-        method, url, headers=headers or {}, json=json, files=files, **kwargs
-    )
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_client.py", line 814, in request
-    return self.send(request, auth=auth, follow_redirects=follow_redirects)
-           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_client.py", line 901, in send
-    response = self._send_handling_auth(
-        request,
-    ...<2 lines>...
-        history=[],
-    )
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_client.py", line 929, in _send_handling_auth
-    response = self._send_handling_redirects(
-        request,
-        follow_redirects=follow_redirects,
-        history=history,
-    )
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_client.py", line 966, in _send_handling_redirects
-    response = self._send_single_request(request)
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1002, in _send_single_request
-    response = transport.handle_request(request)
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 217, in handle_request
-    with map_httpcore_exceptions():
-         ~~~~~~~~~~~~~~~~~~~~~~~^^
-  File "/opt/homebrew/Cellar/python@3.13/3.13.3_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py", line 162, in __exit__
-    self.gen.throw(value)
-    ~~~~~~~~~~~~~~^^^^^^^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 77, in map_httpcore_exceptions
-    raise mapped_exc(message) from exc
-httpx.WriteError: [Errno 32] Broken pipe
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_exceptions.py", line 10, in map_exceptions
-    yield
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_backends/sync.py", line 100, in connect_tcp
-    sock = socket.create_connection(
-        address,
-        timeout,
-        source_address=source_address,
-    )
-  File "/opt/homebrew/Cellar/python@3.13/3.13.3_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/socket.py", line 840, in create_connection
-    for res in getaddrinfo(host, port, 0, SOCK_STREAM):
-               ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Cellar/python@3.13/3.13.3_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/socket.py", line 977, in getaddrinfo
-    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
-               ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-socket.gaierror: [Errno 8] nodename nor servname provided, or not known
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 60, in map_httpcore_exceptions
-    yield
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 218, in handle_request
-    resp = self._pool.handle_request(req)
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_sync/connection_pool.py", line 262, in handle_request
-    raise exc
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_sync/connection_pool.py", line 245, in handle_request
-    response = connection.handle_request(request)
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_sync/connection.py", line 92, in handle_request
-    raise exc
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_sync/connection.py", line 69, in handle_request
-    stream = self._connect(request)
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_sync/connection.py", line 117, in _connect
-    stream = self._network_backend.connect_tcp(**kwargs)
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_backends/sync.py", line 99, in connect_tcp
-    with map_exceptions(exc_map):
-         ~~~~~~~~~~~~~~^^^^^^^^^
-  File "/opt/homebrew/Cellar/python@3.13/3.13.3_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py", line 162, in __exit__
-    self.gen.throw(value)
-    ~~~~~~~~~~~~~~^^^^^^^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
-    raise to_exc(exc) from exc
-httpcore.ConnectError: [Errno 8] nodename nor servname provided, or not known
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/celery/app/trace.py", line 477, in trace_task
-    R = retval = fun(*args, **kwargs)
-                 ~~~^^^^^^^^^^^^^^^^^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/celery/app/trace.py", line 760, in __protected_call__
-    return self.run(*args, **kwargs)
-           ~~~~~~~~^^^^^^^^^^^^^^^^^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/app/tasks/transcription.py", line 230, in transcribe_video_task
-    }).eq("project_id", project_id).execute()
-                                    ~~~~~~~^^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/postgrest/_sync/request_builder.py", line 57, in execute
-    r = self.session.request(
-        self.http_method,
-    ...<3 lines>...
-        headers=self.headers,
-    )
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_client.py", line 814, in request
-    return self.send(request, auth=auth, follow_redirects=follow_redirects)
-           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_client.py", line 901, in send
-    response = self._send_handling_auth(
-        request,
-    ...<2 lines>...
-        history=[],
-    )
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_client.py", line 929, in _send_handling_auth
-    response = self._send_handling_redirects(
-        request,
-        follow_redirects=follow_redirects,
-        history=history,
-    )
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_client.py", line 966, in _send_handling_redirects
-    response = self._send_single_request(request)
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_client.py", line 1002, in _send_single_request
-    response = transport.handle_request(request)
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 217, in handle_request
-    with map_httpcore_exceptions():
-         ~~~~~~~~~~~~~~~~~~~~~~~^^
-  File "/opt/homebrew/Cellar/python@3.13/3.13.3_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/contextlib.py", line 162, in __exit__
-    self.gen.throw(value)
-    ~~~~~~~~~~~~~~^^^^^^^
-  File "/Users/akinpound/Documents/experiments/videothingy/backend/.venv/lib/python3.13/site-packages/httpx/_transports/default.py", line 77, in map_httpcore_exceptions
-    raise mapped_exc(message) from exc
-httpx.ConnectError: [Errno 8] nodename nor servname provided, or not known
-[2025-06-17 16:18:17,917: INFO/MainProcess] Task app.tasks.transcription.transcribe_video_task[a3fd22c4-7a44-4b53-bd02-d6041d5e36ce] received
-[2025-06-17 16:18:17,932: INFO/ForkPoolWorker-8] Starting transcription for project_id: 5a2e1859-7660-47fe-8c8e-4cc6129b906a
-[2025-06-17 16:18:18,285: INFO/ForkPoolWorker-8] HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=video_path&id=eq.5a2e1859-7660-47fe-8c8e-4cc6129b906a "HTTP/1.1 200 OK"
-[2025-06-17 16:18:18,287: INFO/ForkPoolWorker-8] Downloading 62122166-6d81-40ed-bc6e-9bd82d389ccb.mp4 from Supabase Storage...
-[2025-06-17 16:18:19,268: INFO/ForkPoolWorker-8] HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/storage/v1/object/videos/62122166-6d81-40ed-bc6e-9bd82d389ccb.mp4 "HTTP/1.1 200 OK"
-[2025-06-17 16:18:19,872: INFO/ForkPoolWorker-8] Video downloaded to /var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpb5ul8p8n.mp4
-[2025-06-17 16:18:19,873: INFO/ForkPoolWorker-8] Video file size: 10932488 bytes
-[2025-06-17 16:18:20,050: INFO/ForkPoolWorker-8] Video has audio track: True
-[2025-06-17 16:18:20,051: INFO/ForkPoolWorker-8] Starting transcription for /var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpb5ul8p8n.mp4...
-[2025-06-17 16:18:20,185: INFO/ForkPoolWorker-8] HTTP Request: PATCH https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?id=eq.5a2e1859-7660-47fe-8c8e-4cc6129b906a "HTTP/1.1 200 OK"
-[2025-06-17 16:18:20,187: INFO/ForkPoolWorker-8] Running whisper command: whisper /var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpb5ul8p8n.mp4 --model tiny --output_format json --output_dir /tmp --fp16 False --verbose False
-[2025-06-17 16:18:24,446: INFO/ForkPoolWorker-8] Raw JSON content from Whisper: {"text": " So we started digging, and that first we saw only saw one little potato, and Javan got really disappointed he left. So then I started digging a little bit more to the right, and man, did I find some potatoes?", "segments": [{"id": 0, "seek": 0, "start": 0.0, "end": 7.5200000000000005, "text": " So we started digging, and that first we saw only saw one little potato, and Javan got", "tokens": [50364, 407, 321, 1409, 17343, 11, 293, 300, 700, 321, 1866, 787, 1866, 472, 707, 7445, 11, 29...
-[2025-06-17 16:18:24,447: INFO/ForkPoolWorker-8] Parsed Whisper result keys: ['text', 'segments', 'language']
-[2025-06-17 16:18:24,447: INFO/ForkPoolWorker-8] Whisper segments count: 3
-[2025-06-17 16:18:24,448: INFO/ForkPoolWorker-8] Transcription completed successfully
-[2025-06-17 16:18:24,448: INFO/ForkPoolWorker-8] Transcription result keys: ['text', 'segments', 'language']
-[2025-06-17 16:18:24,448: INFO/ForkPoolWorker-8] Full transcription result: {'text': ' So we started digging, and that first we saw only saw one little potato, and Javan got really disappointed he left. So then I started digging a little bit more to the right, and man, did I find some potatoes?', 'segments': [{'id': 0, 'seek': 0, 'start': 0.0, 'end': 7.5200000000000005, 'text': ' So we started digging, and that first we saw only saw one little potato, and Javan got', 'tokens': [50364, 407, 321, 1409, 17343, 11, 293, 300, 700, 321, 1866, 787, 1866, 472, 707, 7445, 11, 293, 508, 21071, 658, 50740], 'temperature': 0.0, 'avg_logprob': -0.44841879385489003, 'compression_ratio': 1.5182481751824817, 'no_speech_prob': 0.008305512368679047}, {'id': 1, 'seek': 0, 'start': 7.5200000000000005, 'end': 14.88, 'text': ' really disappointed he left. So then I started digging a little bit more to the right, and man,', 'tokens': [50740, 534, 13856, 415, 1411, 13, 407, 550, 286, 1409, 17343, 257, 707, 857, 544, 281, 264, 558, 11, 293, 587, 11, 51108], 'temperature': 0.0, 'avg_logprob': -0.44841879385489003, 'compression_ratio': 1.5182481751824817, 'no_speech_prob': 0.008305512368679047}, {'id': 2, 'seek': 0, 'start': 15.68, 'end': 18.16, 'text': ' did I find some potatoes?', 'tokens': [51148, 630, 286, 915, 512, 11811, 30, 51272], 'temperature': 0.0, 'avg_logprob': -0.44841879385489003, 'compression_ratio': 1.5182481751824817, 'no_speech_prob': 0.008305512368679047}], 'language': 'en'}
-[2025-06-17 16:18:24,448: INFO/ForkPoolWorker-8] Number of segments: 3
-[2025-06-17 16:18:24,448: INFO/ForkPoolWorker-8] First segment: {'id': 0, 'seek': 0, 'start': 0.0, 'end': 7.5200000000000005, 'text': ' So we started digging, and that first we saw only saw one little potato, and Javan got', 'tokens': [50364, 407, 321, 1409, 17343, 11, 293, 300, 700, 321, 1866, 787, 1866, 472, 707, 7445, 11, 293, 508, 21071, 658, 50740], 'temperature': 0.0, 'avg_logprob': -0.44841879385489003, 'compression_ratio': 1.5182481751824817, 'no_speech_prob': 0.008305512368679047}
-[2025-06-17 16:18:24,449: INFO/ForkPoolWorker-8] Generated ASS content length: 3255
-[2025-06-17 16:18:24,449: INFO/ForkPoolWorker-8] ASS content preview: [Script Info]
-Title: TikTok-Style Video Captions
-ScriptType: v4.00+
-PlayResX: 1080
-PlayResY: 1920
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Oswald Black,48,&Hffffff,&Hffffff,&...
-[2025-06-17 16:18:24,577: INFO/ForkPoolWorker-8] HTTP Request: POST https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/transcriptions "HTTP/1.1 201 Created"
-[2025-06-17 16:18:24,607: INFO/ForkPoolWorker-8] Saved transcription to database for project 5a2e1859-7660-47fe-8c8e-4cc6129b906a
-[2025-06-17 16:18:24,608: INFO/ForkPoolWorker-8] Starting caption overlay for project 5a2e1859-7660-47fe-8c8e-4cc6129b906a
-[2025-06-17 16:18:24,608: INFO/ForkPoolWorker-8] Created ASS file: /var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmphoyvbsef.ass (3255 chars)
-[2025-06-17 16:18:24,609: INFO/ForkPoolWorker-8] Running FFmpeg command: ffmpeg -i /var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpb5ul8p8n.mp4 -vf ass=/var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmphoyvbsef.ass -c:a copy -c:v libx264 -preset medium -crf 23 -y /var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpn6btxiyk.mp4
-[2025-06-17 16:18:24,712: INFO/ForkPoolWorker-8] HTTP Request: PATCH https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?id=eq.5a2e1859-7660-47fe-8c8e-4cc6129b906a "HTTP/1.1 200 OK"
-[2025-06-17 16:18:30,965: INFO/ForkPoolWorker-8] FFmpeg stdout: 
-[2025-06-17 16:18:30,967: INFO/ForkPoolWorker-8] FFmpeg stderr: ffmpeg version 7.1.1 Copyright (c) 2000-2025 the FFmpeg developers
-  built with Apple clang version 16.0.0 (clang-1600.0.26.6)
-  configuration: --prefix=/opt/homebrew/Cellar/ffmpeg/7.1.1_2 --enable-shared --enable-pthreads --enable-version3 --cc=clang --host-cflags= --host-ldflags='-Wl,-ld_classic' --enable-ffplay --enable-gnutls --enable-gpl --enable-libaom --enable-libaribb24 --enable-libbluray --enable-libdav1d --enable-libharfbuzz --enable-libjxl --enable-libmp3lame --enable-libopus --enable-librav1e --enable-librist --enable-librubberband --enable-libsnappy --enable-libsrt --enable-libssh --enable-libsvtav1 --enable-libtesseract --enable-libtheora --enable-libvidstab --enable-libvmaf --enable-libvorbis --enable-libvpx --enable-libwebp --enable-libx264 --enable-libx265 --enable-libxml2 --enable-libxvid --enable-lzma --enable-libfontconfig --enable-libfreetype --enable-frei0r --enable-libass --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-libopenjpeg --enable-libspeex --enable-libsoxr --enable-libzmq --enable-libzimg --disable-libjack --disable-indev=jack --enable-videotoolbox --enable-audiotoolbox --enable-neon
-  libavutil      59. 39.100 / 59. 39.100
-  libavcodec     61. 19.101 / 61. 19.101
-  libavformat    61.  7.100 / 61.  7.100
-  libavdevice    61.  3.100 / 61.  3.100
-  libavfilter    10.  4.100 / 10.  4.100
-  libswscale      8.  3.100 /  8.  3.100
-  libswresample   5.  3.100 /  5.  3.100
-  libpostproc    58.  3.100 / 58.  3.100
-Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '/var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpb5ul8p8n.mp4':
-  Metadata:
-    major_brand     : mp42
-    minor_version   : 0
-    compatible_brands: isommp42
-    creation_time   : 2025-05-24T00:29:23.000000Z
-    com.android.version: 15
-  Duration: 00:00:20.38, start: 0.000000, bitrate: 4291 kb/s
-  Stream #0:0[0x1](eng): Video: h264 (High) (avc1 / 0x31637661), yuv420p(tv, bt470bg/bt470bg/smpte170m, progressive), 1280x720, 4031 kb/s, 30.03 fps, 60 tbr, 90k tbn (default)
-      Metadata:
-        creation_time   : 2025-05-24T00:29:23.000000Z
-        handler_name    : VideoHandle
-        vendor_id       : [0][0][0][0]
-      Side data:
-        displaymatrix: rotation of -90.00 degrees
-  Stream #0:1[0x2](eng): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 256 kb/s (default)
-      Metadata:
-        creation_time   : 2025-05-24T00:29:23.000000Z
-        handler_name    : SoundHandle
-        vendor_id       : [0][0][0][0]
-[Parsed_ass_0 @ 0x14e71bc30] libass API version: 0x1703000
-[Parsed_ass_0 @ 0x14e71bc30] libass source: tarball: 0.17.3
-[Parsed_ass_0 @ 0x14e71bc30] Shaper: FriBidi 1.0.15 (SIMPLE) HarfBuzz-ng 11.2.1 (COMPLEX)
-[Parsed_ass_0 @ 0x14e71bc30] Using font provider coretext
-[Parsed_ass_0 @ 0x14e71bc30] Added subtitle file: '/var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmphoyvbsef.ass' (2 styles, 3 events)
-Stream mapping:
-  Stream #0:0 -> #0:0 (h264 (native) -> h264 (libx264))
-  Stream #0:1 -> #0:1 (copy)
-Press [q] to stop, [?] for help
-[Parsed_ass_0 @ 0x14e71d940] libass API version: 0x1703000
-[Parsed_ass_0 @ 0x14e71d940] libass source: tarball: 0.17.3
-[Parsed_ass_0 @ 0x14e71d940] Shaper: FriBidi 1.0.15 (SIMPLE) HarfBuzz-ng 11.2.1 (COMPLEX)
-[Parsed_ass_0 @ 0x14e71d940] Using font provider coretext
-[Parsed_ass_0 @ 0x14e71d940] Added subtitle file: '/var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmphoyvbsef.ass' (2 styles, 3 events)
-[Parsed_ass_0 @ 0x14e71d940] fontselect: (Oswald Black, 700, 0) -> /System/Library/Fonts/Helvetica.ttc, -1, Helvetica-Bold
-[libx264 @ 0x14e71ae60] using cpu capabilities: ARMv8 NEON
-[libx264 @ 0x14e71ae60] profile High, level 3.2, 4:2:0, 8-bit
-[libx264 @ 0x14e71ae60] 264 - core 164 r3108 31e19f9 - H.264/MPEG-4 AVC codec - Copyleft 2003-2023 - http://www.videolan.org/x264.html - options: cabac=1 ref=3 deblock=1:0:0 analyse=0x3:0x113 me=hex subme=7 psy=1 psy_rd=1.00:0.00 mixed_ref=1 me_range=16 chroma_me=1 trellis=1 8x8dct=1 cqm=0 deadzone=21,11 fast_pskip=1 chroma_qp_offset=-2 threads=15 lookahead_threads=2 sliced_threads=0 nr=0 decimate=1 interlaced=0 bluray_compat=0 constrained_intra=0 bframes=3 b_pyramid=2 b_adapt=1 b_bias=0 direct=1 weightb=1 open_gop=0 weightp=2 keyint=250 keyint_min=25 scenecut=40 intra_refresh=0 rc_lookahead=40 rc=crf mbtree=1 crf=23.0 qcomp=0.60 qpmin=0 qpmax=69 qpstep=4 ip_ratio=1.40 aq=1:1.00
-Output #0, mp4, to '/var/folders/vh/2k15dtzx66l3r__n7mtz07f00000gq/T/tmpn6btxiyk.mp4':
-  Metadata:
-    major_brand     : mp42
-    minor_version   : 0
-    compatible_brands: isommp42
-    com.android.version: 15
-    encoder         : Lavf61.7.100
-  Stream #0:0(eng): Video: h264 (avc1 / 0x31637661), yuv420p(tv, bt470bg/bt470bg/smpte170m, progressive), 720x1280, q=2-31, 60 fps, 15360 tbn (default)
-      Metadata:
-        creation_time   : 2025-05-24T00:29:23.000000Z
-        handler_name    : VideoHandle
-        vendor_id       : [0][0][0][0]
-        encoder         : Lavc61.19.101 libx264
-      Side data:
-        cpb: bitrate max/min/avg: 0/0/0 buffer size: 0 vbv_delay: N/A
-  Stream #0:1(eng): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 256 kb/s (default)
-      Metadata:
-        creation_time   : 2025-05-24T00:29:23.000000Z
-        handler_name    : SoundHandle
-        vendor_id       : [0][0][0][0]
-frame=   41 fps=0.0 q=29.0 size=    1280KiB time=00:00:01.28 bitrate=8171.0kbits/s speed=2.55x    
-frame=   99 fps= 99 q=29.0 size=    3328KiB time=00:00:03.21 bitrate=8475.7kbits/s speed=3.21x    
-frame=  117 fps= 78 q=29.0 size=    3840KiB time=00:00:03.81 bitrate=8242.2kbits/s speed=2.53x    
-frame=  131 fps= 65 q=29.0 size=    4096KiB time=00:00:04.28 bitrate=7833.8kbits/s speed=2.13x    
-frame=  179 fps= 71 q=29.0 size=    5120KiB time=00:00:05.91 bitrate=7089.0kbits/s speed=2.35x    
-frame=  238 fps= 79 q=29.0 size=    6144KiB time=00:00:07.85 bitrate=6411.7kbits/s speed= 2.6x    
-frame=  287 fps= 82 q=29.0 size=    7424KiB time=00:00:09.48 bitrate=6413.1kbits/s speed= 2.7x    
-frame=  333 fps= 83 q=29.0 size=    8704KiB time=00:00:11.01 bitrate=6472.3kbits/s speed=2.74x    
-frame=  361 fps= 80 q=29.0 size=    9472KiB time=00:00:11.98 bitrate=6475.2kbits/s speed=2.64x    
-frame=  419 fps= 83 q=29.0 size=   11264KiB time=00:00:13.88 bitrate=6646.5kbits/s speed=2.76x    
-frame=  486 fps= 88 q=29.0 size=   12800KiB time=00:00:16.11 bitrate=6506.2kbits/s speed=2.91x    
-frame=  588 fps= 97 q=29.0 size=   14336KiB time=00:00:19.51 bitrate=6017.5kbits/s speed=3.23x    
-[out#0/mp4 @ 0x14e719c30] video:14135KiB audio:636KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.148067%
-frame=  612 fps=100 q=-1.0 Lsize=   14793KiB time=00:00:20.31 bitrate=5964.8kbits/s speed= 3.3x    
-[libx264 @ 0x14e71ae60] frame I:3     Avg QP:22.63  size:105398
-[libx264 @ 0x14e71ae60] frame P:349   Avg QP:26.09  size: 32762
-[libx264 @ 0x14e71ae60] frame B:260   Avg QP:28.67  size: 10474
-[libx264 @ 0x14e71ae60] consecutive B-frames: 37.3% 13.1% 15.7% 34.0%
-[libx264 @ 0x14e71ae60] mb I  I16..4: 11.8% 71.7% 16.4%
-[libx264 @ 0x14e71ae60] mb P  I16..4:  2.2% 10.7%  1.1%  P16..4: 45.7% 19.2% 11.6%  0.0%  0.0%    skip: 9.5%
-[libx264 @ 0x14e71ae60] mb B  I16..4:  0.5%  1.5%  0.1%  B16..8: 49.0% 10.3%  3.4%  direct: 3.7%  skip:31.6%  L0:54.4% L1:30.6% BI:15.0%
-[libx264 @ 0x14e71ae60] 8x8 transform intra:75.9% inter:82.6%
-[libx264 @ 0x14e71ae60] coded y,uvDC,uvAC intra: 57.7% 71.3% 16.7% inter: 31.7% 18.8% 1.9%
-[libx264 @ 0x14e71ae60] i16 v,h,dc,p: 44% 28% 11% 17%
-[libx264 @ 0x14e71ae60] i8 v,h,dc,ddl,ddr,vr,hd,vl,hu: 24% 15% 22%  5%  6%  7%  7%  7%  7%
-[libx264 @ 0x14e71ae60] i4 v,h,dc,ddl,ddr,vr,hd,vl,hu: 19% 16% 14%  7% 10%  9% 10%  8%  7%
-[libx264 @ 0x14e71ae60] i8c dc,h,v,p: 48% 20% 25%  7%
-[libx264 @ 0x14e71ae60] Weighted P-Frames: Y:8.0% UV:4.0%
-[libx264 @ 0x14e71ae60] ref P L0: 74.0% 20.1%  4.2%  1.6%  0.1%
-[libx264 @ 0x14e71ae60] ref B L0: 97.6%  1.9%  0.4%
-[libx264 @ 0x14e71ae60] ref B L1: 99.2%  0.8%
-[libx264 @ 0x14e71ae60] kb/s:5680.55
-
-[2025-06-17 16:18:30,967: INFO/ForkPoolWorker-8] FFmpeg processing completed successfully
-[2025-06-17 16:18:47,151: INFO/ForkPoolWorker-8] HTTP Request: POST https://ghkowjxqwxsikrdivwxl.supabase.co/storage/v1/object/videos/processed_5a2e1859-7660-47fe-8c8e-4cc6129b906a.mp4 "HTTP/1.1 200 OK"
-[2025-06-17 16:18:47,357: INFO/ForkPoolWorker-8] HTTP Request: PATCH https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?id=eq.5a2e1859-7660-47fe-8c8e-4cc6129b906a "HTTP/1.1 200 OK"
-[2025-06-17 16:18:47,359: INFO/ForkPoolWorker-8] Processed video uploaded as processed_5a2e1859-7660-47fe-8c8e-4cc6129b906a.mp4
-[2025-06-17 16:18:47,362: INFO/ForkPoolWorker-8] Caption overlay completed for project 5a2e1859-7660-47fe-8c8e-4cc6129b906a
-[2025-06-17 16:18:47,481: INFO/ForkPoolWorker-8] HTTP Request: PATCH https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?id=eq.5a2e1859-7660-47fe-8c8e-4cc6129b906a "HTTP/1.1 200 OK"
-[2025-06-17 16:18:47,617: INFO/ForkPoolWorker-8] HTTP Request: PATCH https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/processing_jobs?project_id=eq.5a2e1859-7660-47fe-8c8e-4cc6129b906a "HTTP/1.1 200 OK"
-[2025-06-17 16:18:47,620: INFO/ForkPoolWorker-8] Transcription and caption overlay completed for project 5a2e1859-7660-47fe-8c8e-4cc6129b906a
-[2025-06-17 16:18:47,647: INFO/ForkPoolWorker-8] Task app.tasks.transcription.transcribe_video_task[a3fd22c4-7a44-4b53-bd02-d6041d5e36ce] succeeded in 29.720381875056773s: None
+[2025-06-20 11:50:55,479: INFO/ForkPoolWorker-8] FFmpeg processing completed successfully
+[2025-06-20 11:51:15,495: INFO/ForkPoolWorker-8] HTTP Request: POST https://ghkowjxqwxsikrdivwxl.supabase.co/storage/v1/object/videos/processed_9037a331-8a85-419e-a734-2c7a777a33e5.mp4 "HTTP/1.1 200 OK"
+[2025-06-20 11:51:15,834: INFO/ForkPoolWorker-8] HTTP Request: PATCH https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?id=eq.9037a331-8a85-419e-a734-2c7a777a33e5 "HTTP/1.1 200 OK"
+[2025-06-20 11:51:15,835: INFO/ForkPoolWorker-8] Processed video uploaded as processed_9037a331-8a85-419e-a734-2c7a777a33e5.mp4
+[2025-06-20 11:51:15,836: INFO/ForkPoolWorker-8] Caption overlay completed for project 9037a331-8a85-419e-a734-2c7a777a33e5
+[2025-06-20 11:51:16,033: INFO/ForkPoolWorker-8] HTTP Request: PATCH https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?id=eq.9037a331-8a85-419e-a734-2c7a777a33e5 "HTTP/1.1 200 OK"
+[2025-06-20 11:51:16,242: INFO/ForkPoolWorker-8] HTTP Request: PATCH https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/processing_jobs?project_id=eq.9037a331-8a85-419e-a734-2c7a777a33e5 "HTTP/1.1 200 OK"
+[2025-06-20 11:51:16,243: INFO/ForkPoolWorker-8] Transcription and caption overlay completed for project 9037a331-8a85-419e-a734-2c7a777a33e5
+[2025-06-20 11:51:16,258: INFO/ForkPoolWorker-8] Task app.tasks.transcription.transcribe_video_task[cbfb2de1-775a-481b-8bbb-a64ed75e0782] succeeded in 36.56538233300125s: None

@@ -77,32 +77,90 @@ async def upload_video(
         file_id = str(uuid.uuid4())
         storage_filename = f"{file_id}{file_extension}"
         
-        # Read file content
-        file_content = await file.read()
+        # For larger files, we'll use a temporary file and upload in chunks
+        import tempfile
+        import shutil
+        from pathlib import Path
+        import mimetypes
         
-        # Upload to Supabase Storage
-        storage_response = supabase.storage.from_("videos").upload(
-            storage_filename, 
-            file_content,
-            file_options={"content-type": file.content_type}
-        )
+        # Map file extensions to MIME types
+        mime_map = {
+            '.mp4': 'video/mp4',
+            '.mov': 'video/quicktime',
+            '.avi': 'video/x-msvideo',
+            '.webm': 'video/webm',
+            '.mkv': 'video/x-matroska'
+        }
         
-        if hasattr(storage_response, 'error') and storage_response.error:
-            raise HTTPException(status_code=500, detail=f"Failed to upload file: {storage_response.error}")
+        # Get MIME type from file extension
+        content_type = mime_map.get(file_extension.lower(), 'application/octet-stream')
+        
+        # Create a temporary directory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_file_path = Path(temp_dir) / storage_filename
+            
+            # Save uploaded file to temp location
+            with open(temp_file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            
+            # Get file size for progress reporting
+            file_size = temp_file_path.stat().st_size
+            logger.info(f"Uploading file of size: {file_size} bytes with MIME type: {content_type}")
+            
+            try:
+                # Use supabase-py's storage API directly with the file path
+                with open(temp_file_path, 'rb') as f:
+                    # Upload the file in one go (Supabase handles chunking internally)
+                    storage_response = supabase.storage.from_("videos").upload(
+                        path=storage_filename,
+                        file=f,
+                        file_options={
+                            "content-type": content_type,
+                            "x-upsert": "true",
+                            "cache-control": "3600"
+                        }
+                    )
+                    
+                    if hasattr(storage_response, 'error') and storage_response.error:
+                        raise HTTPException(
+                            status_code=500, 
+                            detail=f"Failed to upload file: {storage_response.error}"
+                        )
+                        
+            except Exception as upload_error:
+                logger.error(f"Supabase upload error: {str(upload_error)}", exc_info=True)
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to upload file to storage: {str(upload_error)}"
+                )
         
         # Create project record
         # For now, using a dummy user_id - will integrate auth later
         dummy_user_id = "00000000-0000-0000-0000-000000000001"
         
-        project_response = supabase.table("projects").insert({
-            "user_id": dummy_user_id,
-            "name": project_name,
-            "video_path": storage_filename,
-            "status": "uploaded"
-        }).execute()
-        
-        if not project_response.data or len(project_response.data) == 0:
-            raise HTTPException(status_code=500, detail="Failed to create project record.")
+        try:
+            project_response = supabase.table("projects").insert({
+                "user_id": dummy_user_id,
+                "name": project_name,
+                "video_path": storage_filename,
+                "status": "uploaded"
+            }).execute()
+            
+            if not project_response.data or len(project_response.data) == 0:
+                raise Exception("No data returned from projects insert")
+                
+        except Exception as db_error:
+            logger.error(f"Database error: {str(db_error)}")
+            # Clean up the uploaded file if project creation fails
+            try:
+                supabase.storage.from_("videos").remove([storage_filename])
+            except Exception as cleanup_error:
+                logger.error(f"Failed to clean up file {storage_filename}: {str(cleanup_error)}")
+                
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to create project record: {str(db_error)}"
+            )
         
         project = project_response.data[0]
         logger.info(f"Created project {project['id']} with video {storage_filename}")
@@ -115,8 +173,15 @@ async def upload_video(
             "status": project["status"]
         }
         
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
-        logger.error(f"Upload failed: {str(e)}")
+        logger.error(f"Upload failed: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"An unexpected error occurred during file upload: {str(e)}"
+        )
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 @router.get("/projects")

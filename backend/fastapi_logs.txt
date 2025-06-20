@@ -1,2 +1,102 @@
 INFO:     Will watch for changes in these directories: ['/Users/akinpound/Documents/experiments/videothingy/backend']
-ERROR:    [Errno 48] Address already in use
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [59380] using WatchFiles
+INFO:     Started server process [59382]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+ Supabase Client Debug:
+   URL: https://ghkowjxqwxsikrdivwxl.supabase.co
+   Key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzd...jpvtePYZ3A
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:app.api.endpoints:Uploading file of size: 10932488 bytes with MIME type: video/mp4
+INFO:httpx:HTTP Request: POST https://ghkowjxqwxsikrdivwxl.supabase.co/storage/v1/object/videos/814d3948-b98f-4e1b-bd2e-10b3fb0bc1cf.mp4 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects "HTTP/1.1 201 Created"
+INFO:app.api.endpoints:Created project 9037a331-8a85-419e-a734-2c7a777a33e5 with video 814d3948-b98f-4e1b-bd2e-10b3fb0bc1cf.mp4
+INFO:     ::1:0 - "POST /api/v1/upload HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:app.api.endpoints:Received transcription request for project_id: 9037a331-8a85-419e-a734-2c7a777a33e5
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=id&id=eq.9037a331-8a85-419e-a734-2c7a777a33e5 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/processing_jobs "HTTP/1.1 201 Created"
+INFO:app.api.endpoints:Queued transcription task for project_id: 9037a331-8a85-419e-a734-2c7a777a33e5, job_id: 66636ea2-efb9-4bfe-b612-cb82ae85f6dc
+INFO:     ::1:0 - "POST /api/v1/transcribe HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=name%2C%20video_path%2C%20processed_video_path&id=eq.9037a331-8a85-419e-a734-2c7a777a33e5 "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/storage/v1/object/videos/processed_9037a331-8a85-419e-a734-2c7a777a33e5.mp4 "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects/9037a331-8a85-419e-a734-2c7a777a33e5/download/video?processed=true HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
+INFO:httpx:HTTP Request: GET https://ghkowjxqwxsikrdivwxl.supabase.co/rest/v1/projects?select=%2A&order=created_at.desc "HTTP/1.1 200 OK"
+INFO:     ::1:0 - "GET /api/v1/projects HTTP/1.1" 200 OK
