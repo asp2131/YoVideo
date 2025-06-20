@@ -60,7 +60,7 @@ A FastAPI-based backend service for video transcription and caption overlay. Thi
 
 3. **Start the Celery worker** (in a second terminal):
    ```bash
-   celery -A app.worker.celery_app worker --loglevel=info
+  celery -A app.core.celery_app worker --loglevel=info 
    ```
 
 4. **Access the API documentation**:

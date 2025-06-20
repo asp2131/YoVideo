@@ -30,10 +30,18 @@ echo "Celery worker started with PID: $CELERY_PID"
 # --- 3. Start the FastAPI Application ---
 echo "Starting FastAPI application..."
 
-# Start Uvicorn server
-./.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > fastapi_logs.txt 2>&1 &
+# Set default RELOAD to true if not set
+RELOAD=${RELOAD:-true}
+
+# Start Uvicorn server with conditional reload
+echo "Starting Uvicorn with reload=$RELOAD..."
+if [ "$RELOAD" = "true" ]; then
+    ./.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > fastapi_logs.txt 2>&1 &
+else
+    ./.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-reload > fastapi_logs.txt 2>&1 &
+fi
 UVICORN_PID=$!
-echo "FastAPI app started with PID: $UVICORN_PID"
+echo "FastAPI app started with PID: $UVICORN_PID (reload=$RELOAD)"
 
 echo "\nBackend services are starting up."
 echo "- Redis is running in Docker"
