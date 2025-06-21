@@ -11,11 +11,17 @@ import os
 import tempfile
 import asyncio
 import json
+from pathlib import Path
 from typing import Dict, List
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Define upload directory
+UPLOAD_TEMP_DIR = Path(__file__).parent.parent / "temp_uploads"
+UPLOAD_TEMP_DIR.mkdir(parents=True, exist_ok=True)
+logger.info(f"Using upload temp directory: {UPLOAD_TEMP_DIR}")
 
 router = APIRouter()
 
@@ -300,8 +306,10 @@ async def init_chunked_upload(request: UploadInitRequest):
         # Generate unique project ID
         project_id = str(uuid.uuid4())
         
-        # Create temporary directory for chunks
-        temp_dir = tempfile.mkdtemp(prefix=f"upload_{request.uploadId}_")
+        # Create temporary directory for this upload session
+        temp_dir = UPLOAD_TEMP_DIR / f"upload_{request.uploadId}"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_dir = str(temp_dir)  # Convert to string for compatibility
         
         # Create upload session
         session = UploadSession(
