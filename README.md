@@ -1,6 +1,6 @@
-# OpusClip - AI-Powered Video Editor
+# YoVideo - AI-Powered Video Editor
 
-OpusClip is an advanced video editing platform that leverages AI to help users create engaging video clips with ease. This project is structured as a modern microservices application with the following components:
+YoVideo is an advanced video editing platform that leverages AI to help users create engaging video clips with ease. This project is structured as a modern microservices application with the following components:
 
 1. **Frontend** (Next.js with Tailwind CSS)
 2. **API Gateway** (Go with Fiber)
@@ -9,8 +9,7 @@ OpusClip is an advanced video editing platform that leverages AI to help users c
 
 ## Project Structure
 
-```
-videothingy/
+```YoVideo/
 ├── frontend/             # Next.js frontend application
 ├── api-gateway/          # Go API Gateway service
 ├── video-processor/      # Go Video Processing service
