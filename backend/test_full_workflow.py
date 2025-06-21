@@ -16,7 +16,7 @@ from pathlib import Path
 
 # Configuration
 BASE_URL = "http://localhost:8000/api/v1"
-TEST_VIDEO_PATH = "test_video.mp4"  # You'll need to provide a test video
+TEST_VIDEO_PATH = "test_video_2.mp4"  # You'll need to provide a test video
 
 def create_test_video():
     """Create a simple test video using FFmpeg if it doesn't exist."""
@@ -47,7 +47,7 @@ def upload_video():
         return None
     
     with open(TEST_VIDEO_PATH, 'rb') as video_file:
-        files = {'file': ('test_video.mp4', video_file, 'video/mp4')}
+        files = {'file': ('test_video_2.mp4', video_file, 'video/mp4')}
         data = {'project_name': 'Test Video Transcription'}
         
         response = requests.post(f"{BASE_URL}/upload", files=files, data=data)

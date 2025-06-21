@@ -4,11 +4,14 @@ from pydantic import BaseModel
 from app.schemas.transcription import TranscriptionRequest
 from app.tasks.transcription import transcribe_video_task
 from app.services.supabase_client import supabase
+from app.services.r2_client import get_r2_client
 import logging
 import uuid
 import os
 import tempfile
 import asyncio
+import json
+from typing import Dict, List
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -18,6 +21,29 @@ router = APIRouter()
 
 class TranscriptionRequest(BaseModel):
     project_id: str
+
+class UploadInitRequest(BaseModel):
+    fileName: str
+    fileSize: int
+    fileType: str
+    projectName: str
+    totalChunks: int
+    uploadId: str
+
+class ChunkMetadata(BaseModel):
+    chunkIndex: int
+    chunkSize: int
+    totalChunks: int
+    totalSize: int
+    fileName: str
+    fileType: str
+    uploadId: str
+    projectId: str
+
+class UploadCompleteRequest(BaseModel):
+    uploadId: str
+    projectId: str
+    chunks: List[str]
 
 @router.post("/transcribe")
 async def start_transcription(request: TranscriptionRequest):
@@ -61,15 +87,45 @@ async def start_transcription(request: TranscriptionRequest):
 # Chunk size for file uploads (5MB chunks)
 CHUNK_SIZE = 5 * 1024 * 1024  # 5MB
 
-async def upload_to_supabase_with_timeout(file_path: str, storage_filename: str, content_type: str, timeout: int = 300):
-    """Upload file to Supabase with timeout handling."""
+# In-memory storage for upload sessions
+upload_sessions: Dict[str, Dict] = {}
+
+class UploadSession:
+    def __init__(self, upload_id: str, project_id: str, file_name: str, file_size: int, 
+                 file_type: str, total_chunks: int, temp_dir: str):
+        self.upload_id = upload_id
+        self.project_id = project_id
+        self.file_name = file_name
+        self.file_size = file_size
+        self.file_type = file_type
+        self.total_chunks = total_chunks
+        self.temp_dir = temp_dir
+        self.uploaded_chunks: Dict[int, str] = {}  # chunk_index -> file_path
+        self.completed = False
+        
+    def add_chunk(self, chunk_index: int, file_path: str):
+        self.uploaded_chunks[chunk_index] = file_path
+        
+    def is_complete(self) -> bool:
+        return len(self.uploaded_chunks) == self.total_chunks
+        
+    def get_chunk_paths(self) -> List[str]:
+        """Get chunk file paths in order"""
+        paths = []
+        for i in range(self.total_chunks):
+            if i in self.uploaded_chunks:
+                paths.append(self.uploaded_chunks[i])
+            else:
+                raise ValueError(f"Missing chunk {i}")
+        return paths
+
+async def upload_to_r2_with_timeout(file_path: str, storage_filename: str, content_type: str, timeout: int = 300):
+    """Upload file to Cloudflare R2 with timeout handling."""
     def sync_upload():
-        with open(file_path, 'rb') as f:
-            return supabase.storage.from_("videos").upload(
-                path=storage_filename,
-                file=f,
-                file_options={"content-type": content_type}
-            )
+        client = get_r2_client()
+        if client is None:
+            raise Exception("Failed to initialize R2 client. Check R2 credentials.")
+        return client.upload_file(file_path, storage_filename, content_type)
     
     # Run the sync upload in a thread pool with timeout
     try:
@@ -147,15 +203,15 @@ async def upload_video(
                     try:
                         logger.info(f"Starting upload attempt {attempt + 1} of {max_retries}")
                         
-                        # Upload to Supabase with timeout
-                        logger.info(f"Starting Supabase upload for file: {storage_filename} ({total_size} bytes)")
-                        storage_response = await upload_to_supabase_with_timeout(
+                        # Upload to R2 with timeout
+                        logger.info(f"Starting R2 upload for file: {storage_filename} ({total_size} bytes)")
+                        storage_response = await upload_to_r2_with_timeout(
                             temp_file_path, 
                             storage_filename, 
                             content_type,
-                            timeout=300  # 5 minutes
+                            timeout=600  # 10 minutes for R2
                         )
-                        logger.info(f"Supabase upload response: {storage_response}")
+                        logger.info(f"R2 upload response: {storage_response}")
                             
                         # If we get here, upload was successful
                         logger.info(f"Successfully uploaded file to storage: {storage_filename}")
@@ -178,7 +234,7 @@ async def upload_video(
                     "id": file_id,
                     "name": project_name,
                     "original_filename": file.filename,
-                    "file_path": storage_filename,
+                    "video_path": storage_filename,
                     "file_size": total_size,
                     "status": "uploaded"
                 }
@@ -190,6 +246,13 @@ async def upload_video(
                         status_code=500,
                         detail="Failed to create project record in database"
                     )
+                
+                # Automatically start transcription task
+                try:
+                    task = transcribe_video_task.delay(file_id)
+                    logger.info(f"Started transcription task {task.id} for project {file_id}")
+                except Exception as e:
+                    logger.error(f"Failed to start transcription task for project {file_id}: {e}", exc_info=True)
                 
                 return {"id": file_id, "status": "uploaded", "filename": storage_filename}
                 
@@ -215,6 +278,347 @@ async def upload_video(
         raise HTTPException(
             status_code=500,
             detail=f"An unexpected error occurred during file upload: {str(e)}"
+        )
+
+@router.post("/upload/init")
+async def init_chunked_upload(request: UploadInitRequest):
+    """
+    Initialize a chunked upload session.
+    Creates a project record and sets up temporary storage for chunks.
+    """
+    try:
+        # Validate file type
+        allowed_extensions = {'.mp4', '.mov', '.avi', '.webm', '.mkv'}
+        file_extension = os.path.splitext(request.fileName)[1].lower()
+        
+        if file_extension not in allowed_extensions:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}"
+            )
+        
+        # Generate unique project ID
+        project_id = str(uuid.uuid4())
+        
+        # Create temporary directory for chunks
+        temp_dir = tempfile.mkdtemp(prefix=f"upload_{request.uploadId}_")
+        
+        # Create upload session
+        session = UploadSession(
+            upload_id=request.uploadId,
+            project_id=project_id,
+            file_name=request.fileName,
+            file_size=request.fileSize,
+            file_type=request.fileType,
+            total_chunks=request.totalChunks,
+            temp_dir=temp_dir
+        )
+        
+        # Store session
+        upload_sessions[request.uploadId] = session
+        
+        # Create project record in database
+        project_data = {
+            "id": project_id,
+            "user_id": "00000000-0000-0000-0000-000000000001",  # Default user ID
+            "name": request.projectName,
+            "original_filename": request.fileName,
+            "video_path": "",  # Will be set when upload completes
+            "file_size": request.fileSize,
+            "status": "uploading"
+        }
+        
+        db_response = supabase.table("projects").insert(project_data).execute()
+        
+        if not db_response.data:
+            # Clean up temp directory
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            del upload_sessions[request.uploadId]
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to create project record in database"
+            )
+        
+        logger.info(f"Initialized chunked upload for project {project_id}: {request.fileName} ({request.fileSize} bytes, {request.totalChunks} chunks)")
+        
+        return {
+            "projectId": project_id,
+            "uploadId": request.uploadId,
+            "message": "Upload session initialized"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to initialize chunked upload: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to initialize upload: {str(e)}"
+        )
+
+@router.post("/upload/chunk")
+async def upload_chunk(
+    chunk: UploadFile = File(...),
+    metadata: str = Form(...)
+):
+    """
+    Upload a single chunk of a file.
+    """
+    try:
+        # Parse metadata
+        chunk_metadata = ChunkMetadata.model_validate_json(metadata)
+        
+        # Get upload session
+        if chunk_metadata.uploadId not in upload_sessions:
+            raise HTTPException(
+                status_code=404,
+                detail="Upload session not found"
+            )
+        
+        session = upload_sessions[chunk_metadata.uploadId]
+        
+        # Validate chunk index
+        if chunk_metadata.chunkIndex >= session.total_chunks:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid chunk index {chunk_metadata.chunkIndex}"
+            )
+        
+        # Save chunk to temporary file
+        chunk_filename = f"chunk_{chunk_metadata.chunkIndex:06d}"
+        chunk_path = os.path.join(session.temp_dir, chunk_filename)
+        
+        with open(chunk_path, "wb") as f:
+            chunk_content = await chunk.read()
+            f.write(chunk_content)
+        
+        # Add chunk to session
+        session.add_chunk(chunk_metadata.chunkIndex, chunk_path)
+        
+        logger.info(f"Uploaded chunk {chunk_metadata.chunkIndex + 1}/{session.total_chunks} for upload {chunk_metadata.uploadId}")
+        
+        return {
+            "chunkIndex": chunk_metadata.chunkIndex,
+            "etag": f"chunk_{chunk_metadata.chunkIndex}",
+            "uploaded": len(session.uploaded_chunks),
+            "total": session.total_chunks,
+            "message": f"Chunk {chunk_metadata.chunkIndex} uploaded successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to upload chunk: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload chunk: {str(e)}"
+        )
+
+@router.post("/upload/complete")
+async def complete_chunked_upload(request: UploadCompleteRequest):
+    """
+    Complete a chunked upload by assembling chunks and uploading to Supabase.
+    """
+    try:
+        # Get upload session
+        if request.uploadId not in upload_sessions:
+            raise HTTPException(
+                status_code=404,
+                detail="Upload session not found"
+            )
+        
+        session = upload_sessions[request.uploadId]
+        
+        # Check if all chunks are uploaded
+        if not session.is_complete():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing chunks. Have {len(session.uploaded_chunks)}/{session.total_chunks}"
+            )
+        
+        # Assemble chunks into final file
+        final_file_path = os.path.join(session.temp_dir, "assembled_file")
+        
+        try:
+            with open(final_file_path, "wb") as final_file:
+                chunk_paths = session.get_chunk_paths()
+                total_written = 0
+                
+                for i, chunk_path in enumerate(chunk_paths):
+                    with open(chunk_path, "rb") as chunk_file:
+                        chunk_data = chunk_file.read()
+                        final_file.write(chunk_data)
+                        total_written += len(chunk_data)
+                        logger.debug(f"Assembled chunk {i}: {len(chunk_data)} bytes")
+            
+            logger.info(f"Assembled {len(chunk_paths)} chunks into {total_written} bytes for upload {request.uploadId}")
+            
+            # Verify file size
+            if total_written != session.file_size:
+                raise Exception(f"File size mismatch: expected {session.file_size}, got {total_written}")
+            
+            # Generate storage filename
+            file_extension = os.path.splitext(session.file_name)[1].lower()
+            storage_filename = f"{session.project_id}{file_extension}"
+            
+            # Map file extensions to MIME types
+            mime_map = {
+                '.mp4': 'video/mp4',
+                '.mov': 'video/quicktime',
+                '.avi': 'video/x-msvideo',
+                '.webm': 'video/webm',
+                '.mkv': 'video/x-matroska'
+            }
+            content_type = mime_map.get(file_extension.lower(), 'application/octet-stream')
+            
+            # Upload to Cloudflare R2 with extended timeout for large files
+            logger.info(f"Starting R2 upload for assembled file: {storage_filename} ({total_written} bytes)")
+            
+            # R2 is much more reliable, use generous timeout for large files
+            timeout_minutes = max(10, total_written // (1024 * 1024 * 2))  # 2MB per minute (very conservative)
+            timeout_seconds = min(timeout_minutes * 60, 1800)  # Cap at 30 minutes
+            
+            logger.info(f"Using {timeout_seconds // 60} minute timeout for {total_written // (1024 * 1024)}MB file")
+            
+            try:
+                storage_response = await upload_to_r2_with_timeout(
+                    final_file_path,
+                    storage_filename,
+                    content_type,
+                    timeout=timeout_seconds
+                )
+                logger.info(f"R2 upload completed successfully: {storage_response}")
+                
+            except asyncio.TimeoutError:
+                logger.error(f"Upload timed out after {timeout_seconds} seconds")
+                raise HTTPException(
+                    status_code=408,
+                    detail=f"File upload timed out. This is unusual for R2 - please check your connection."
+                )
+            except Exception as upload_error:
+                logger.error(f"R2 upload failed: {str(upload_error)}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to upload file to R2 storage: {str(upload_error)}"
+                )
+            
+            # Update project record with video path
+            update_data = {
+                "video_path": storage_filename,
+                "status": "uploaded"
+            }
+            
+            db_response = supabase.table("projects").update(update_data).eq("id", session.project_id).execute()
+            
+            if not db_response.data:
+                raise Exception("Failed to update project record")
+            
+            # Mark session as completed
+            session.completed = True
+            
+            logger.info(f"Completed chunked upload for project {session.project_id}: {storage_filename}")
+            
+            # Automatically start transcription task
+            try:
+                task = transcribe_video_task.delay(session.project_id)
+                logger.info(f"Started transcription task {task.id} for project {session.project_id}")
+            except Exception as e:
+                logger.error(f"Failed to start transcription task for project {session.project_id}: {e}", exc_info=True)
+            
+            return {
+                "projectId": session.project_id,
+                "filename": storage_filename,
+                "status": "uploaded",
+                "message": "Upload completed successfully - transcription started"
+            }
+            
+        finally:
+            # Clean up temporary files
+            try:
+                import shutil
+                shutil.rmtree(session.temp_dir, ignore_errors=True)
+                del upload_sessions[request.uploadId]
+                logger.info(f"Cleaned up upload session {request.uploadId}")
+            except Exception as cleanup_error:
+                logger.error(f"Error cleaning up upload session: {str(cleanup_error)}")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to complete chunked upload: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to complete upload: {str(e)}"
+        )
+
+@router.get("/upload/{upload_id}/status")
+async def get_upload_status(upload_id: str):
+    """
+    Get the status of a chunked upload session.
+    """
+    if upload_id not in upload_sessions:
+        raise HTTPException(
+            status_code=404,
+            detail="Upload session not found"
+        )
+    
+    session = upload_sessions[upload_id]
+    
+    return {
+        "uploadId": upload_id,
+        "projectId": session.project_id,
+        "fileName": session.file_name,
+        "fileSize": session.file_size,
+        "totalChunks": session.total_chunks,
+        "uploadedChunks": len(session.uploaded_chunks),
+        "completed": session.completed,
+        "isComplete": session.is_complete(),
+        "progress": (len(session.uploaded_chunks) / session.total_chunks) * 100
+    }
+
+@router.delete("/upload/{upload_id}")
+async def cancel_chunked_upload(upload_id: str):
+    """
+    Cancel a chunked upload and clean up resources.
+    """
+    try:
+        if upload_id not in upload_sessions:
+            raise HTTPException(
+                status_code=404,
+                detail="Upload session not found"
+            )
+        
+        session = upload_sessions[upload_id]
+        
+        # Clean up temporary files
+        try:
+            import shutil
+            shutil.rmtree(session.temp_dir, ignore_errors=True)
+        except Exception as cleanup_error:
+            logger.error(f"Error cleaning up temp directory: {str(cleanup_error)}")
+        
+        # Remove project from database if not completed
+        if not session.completed:
+            try:
+                supabase.table("projects").delete().eq("id", session.project_id).execute()
+            except Exception as db_error:
+                logger.error(f"Error removing project from database: {str(db_error)}")
+        
+        # Remove session
+        del upload_sessions[upload_id]
+        
+        logger.info(f"Cancelled upload session {upload_id}")
+        
+        return {"message": "Upload cancelled successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to cancel upload: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to cancel upload: {str(e)}"
         )
 
 @router.get("/projects")
@@ -344,29 +748,21 @@ async def download_video(project_id: str, processed: bool = False):
             video_path = project["video_path"]
             filename_suffix = "_original"
         
-        # Download from Supabase Storage
-        video_data = supabase.storage.from_("videos").download(video_path)
-        
-        # Get file extension for proper content type
-        file_extension = os.path.splitext(video_path)[1].lower()
-        content_type_map = {
-            '.mp4': 'video/mp4',
-            '.mov': 'video/quicktime',
-            '.avi': 'video/x-msvideo',
-            '.webm': 'video/webm'
-        }
-        content_type = content_type_map.get(file_extension, 'video/mp4')
-        
-        # Clean filename
-        project_name = project["name"]
-        safe_filename = "".join(c for c in project_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
-        filename = f"{safe_filename}{filename_suffix}{file_extension}"
-        
-        return Response(
-            content=video_data,
-            media_type=content_type,
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
-        )
+        try:
+            # Download from R2 Storage
+            client = get_r2_client()
+            if client is None:
+                raise HTTPException(status_code=503, detail="Failed to initialize R2 storage client")
+                
+            # Generate a presigned URL for download
+            download_url = client.get_file_url(video_path, expires_in=3600)
+                
+            # Return redirect to presigned URL for direct download
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url=download_url, status_code=302)
+        except Exception as e:
+            logger.error(f"Failed to generate download URL for {video_path}: {str(e)}")
+            raise HTTPException(status_code=404, detail="Video file not found or cannot be accessed")
         
     except HTTPException:
         raise

@@ -5,6 +5,7 @@ import { Upload, FileVideo, Download, Trash2, Play, Clock, CheckCircle, AlertCir
 import axios from 'axios'
 import { useProjects, useDeleteProject, useUploadProject, type Project } from '../hooks/use-projects'
 import { useUploadStore } from '../store/upload-store'
+import EnhancedUpload from '@/components/Enhancedupload'
 
 export default function Home() {
   const { data: projectsData, isLoading: loading, error } = useProjects()
@@ -154,25 +155,8 @@ export default function Home() {
             </div>
           ) : (
             <div className="space-y-4">
-              <Upload className="mx-auto w-12 h-12 text-gray-400" />
-              <div>
-                <p className="text-lg font-medium text-gray-700">
-                  Drop your video here or click to browse
-                </p>
-                <p className="text-sm text-gray-500 mt-1">
-                  Supports MP4, MOV, AVI and other video formats
-                </p>
-              </div>
-              <label className="inline-flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 cursor-pointer transition-colors">
-                <FileVideo className="w-4 h-4 mr-2" />
-                Choose Video File
-                <input
-                  type="file"
-                  accept="video/*"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-              </label>
+              <EnhancedUpload />
+            
             </div>
           )}
         </div>

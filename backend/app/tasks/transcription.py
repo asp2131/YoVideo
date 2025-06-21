@@ -6,6 +6,7 @@ import json
 from celery import current_task
 from app.core.celery_app import celery_app
 from app.services.supabase_client import supabase
+from app.services.r2_client import get_r2_client
 from app.services.caption_service import segments_to_ass
 
 # Configure logging
@@ -80,39 +81,48 @@ def transcribe_video_task(self, project_id: str):
         if not video_path:
             raise ValueError(f"No video_path found for project {project_id}")
 
-        # 2. Download video from Supabase Storage
+        # 2. Download video from R2 Storage
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(video_path)[1]) as tmp_video_file:
-            logger.info(f"Downloading {video_path} from Supabase Storage...")
-            video_data = supabase.storage.from_("videos").download(video_path)
-            tmp_video_file.write(video_data)
             tmp_video_file_path = tmp_video_file.name
+            
+        logger.info(f"Downloading {video_path} from R2 Storage...")
+        
+        client = get_r2_client()
+        if client is None:
+            raise Exception("Failed to initialize R2 client")
+            
+        try:
+            client.download_file(video_path, tmp_video_file_path)
             logger.info(f"Video downloaded to {tmp_video_file_path}")
+        except Exception as e:
+            logger.error(f"Failed to download video from R2: {str(e)}")
+            raise Exception(f"Failed to download video: {str(e)}")
             
-            # Validate video file
-            file_size = os.path.getsize(tmp_video_file_path)
-            logger.info(f"Video file size: {file_size} bytes")
+        # Validate video file
+        file_size = os.path.getsize(tmp_video_file_path)
+        logger.info(f"Video file size: {file_size} bytes")
+        
+        if file_size == 0:
+            raise Exception("Downloaded video file is empty")
             
-            if file_size == 0:
-                raise Exception("Downloaded video file is empty")
+        # Check if file has audio using ffprobe
+        try:
+            ffprobe_cmd = [
+                'ffprobe', '-v', 'quiet', '-select_streams', 'a:0', 
+                '-show_entries', 'stream=codec_type', '-of', 'csv=p=0', 
+                tmp_video_file_path
+            ]
+            result = subprocess.run(ffprobe_cmd, capture_output=True, text=True, timeout=30)
+            has_audio = result.stdout.strip() == 'audio'
+            logger.info(f"Video has audio track: {has_audio}")
             
-            # Check if file has audio using ffprobe
-            try:
-                ffprobe_cmd = [
-                    'ffprobe', '-v', 'quiet', '-select_streams', 'a:0', 
-                    '-show_entries', 'stream=codec_type', '-of', 'csv=p=0', 
-                    tmp_video_file_path
-                ]
-                result = subprocess.run(ffprobe_cmd, capture_output=True, text=True, timeout=30)
-                has_audio = result.stdout.strip() == 'audio'
-                logger.info(f"Video has audio track: {has_audio}")
+            if not has_audio:
+                logger.warning("Video file has no audio track - transcription will be empty")
+                # Still proceed but with a warning
                 
-                if not has_audio:
-                    logger.warning("Video file has no audio track - transcription will be empty")
-                    # Still proceed but with a warning
-                    
-            except Exception as probe_error:
-                logger.warning(f"Could not probe video file: {probe_error}")
-                # Continue anyway
+        except Exception as probe_error:
+            logger.warning(f"Could not probe video file: {probe_error}")
+            # Continue anyway
 
         # 3. Transcribe the video file
         logger.info(f"Starting transcription for {tmp_video_file_path}...")
@@ -310,28 +320,32 @@ def generate_caption_overlay(project_id: str, input_video_path: str, ass_content
         
         logger.info("FFmpeg processing completed successfully")
 
-        # Upload processed video to Supabase Storage
+        # Upload processed video to R2 Storage
         processed_filename = f"processed_{project_id}.mp4"
         
-        with open(output_video_path, 'rb') as video_file:
-            video_data = video_file.read()
-            
-        storage_response = supabase.storage.from_("videos").upload(
-            processed_filename,
-            video_data,
-            file_options={"content-type": "video/mp4"}
-        )
-
-        if hasattr(storage_response, 'error') and storage_response.error:
-            logger.error(f"Failed to upload processed video: {storage_response.error}")
-            raise Exception(f"Failed to upload processed video: {storage_response.error}")
+        logger.info(f"Uploading processed video to R2: {processed_filename}")
+        
+        client = get_r2_client()
+        if client is None:
+            raise Exception("Failed to initialize R2 client for processed video upload")
+        
+        try:
+            upload_result = client.upload_file(
+                output_video_path, 
+                processed_filename, 
+                "video/mp4"
+            )
+            logger.info(f"Processed video uploaded to R2: {upload_result}")
+        except Exception as upload_error:
+            logger.error(f"Failed to upload processed video to R2: {str(upload_error)}")
+            raise Exception(f"Failed to upload processed video: {str(upload_error)}")
 
         # Update project with processed video path
         supabase.table("projects").update({
             "processed_video_path": processed_filename
         }).eq("id", project_id).execute()
 
-        logger.info(f"Processed video uploaded as {processed_filename}")
+        logger.info(f"Processed video uploaded to R2 as {processed_filename}")
         
         return processed_filename
 
