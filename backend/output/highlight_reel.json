@@ -1,0 +1,13 @@
+{
+  "status": "success",
+  "segments": [
+    {
+      "start": 22.48,
+      "end": 22.729999999999997,
+      "type": "longest_gap",
+      "duration": 0.24999999999999645
+    }
+  ],
+  "total_duration": 62.676354,
+  "message": null
+}
