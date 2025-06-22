@@ -210,7 +210,7 @@ def concat_videos(
     temp_dir: Optional[Path] = None
 ) -> bool:
     """
-    Concatenate multiple video files.
+    Concatenate multiple video files while maintaining audio-video sync.
     
     Args:
         input_files: List of input video files
@@ -224,43 +224,69 @@ def concat_videos(
         logger.warning("No input files provided for concatenation")
         return False
     
-    # If only one file, just copy it
+    # If only one file, just copy it with re-encoding to ensure compatibility
     if len(input_files) == 1:
-        import shutil
-        shutil.copy2(input_files[0], output_path)
-        return True
+        try:
+            cmd = [
+                'ffmpeg',
+                '-i', str(input_files[0]),
+                '-c:v', 'libx264',
+                '-c:a', 'aac',
+                '-strict', 'experimental',
+                '-b:a', '192k',
+                '-ar', '48000',
+                '-preset', 'fast',
+                '-movflags', '+faststart',
+                '-y',
+                str(output_path)
+            ]
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            return True
+        except (subprocess.CalledProcessError, OSError) as e:
+            logger.error(f"Error processing single file: {e}")
+            return False
     
-    # Create a temporary directory if not provided
+    # Create a temporary directory if none provided
     if temp_dir is None:
-        temp_dir = Path(tempfile.mkdtemp(prefix="concat_temp_"))
-    else:
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_dir = Path(tempfile.mkdtemp(prefix='videothingy_'))
+    
+    # Create a file list for ffmpeg concat demuxer
+    concat_file = temp_dir / 'concat_list.txt'
     
     try:
-        # Create a file list for ffmpeg concat
-        file_list = temp_dir / "file_list.txt"
-        with open(file_list, 'w') as f:
-            for video_file in input_files:
-                f.write(f"file '{video_file.absolute()}'\n")
+        # Write the concat file
+        with open(concat_file, 'w') as f:
+            for file in input_files:
+                f.write(f"file '{file.absolute()}'\n")
         
-        # Run ffmpeg concat
+        # Use concat demuxer with re-encoding for better compatibility
         cmd = [
             'ffmpeg',
             '-f', 'concat',
             '-safe', '0',
-            '-i', str(file_list),
-            '-c', 'copy',
+            '-i', str(concat_file),
+            '-c:v', 'libx264',
+            '-c:a', 'aac',
+            '-strict', 'experimental',
+            '-b:a', '192k',
+            '-ar', '48000',
+            '-preset', 'fast',
+            '-movflags', '+faststart',
             '-y',
             str(output_path)
         ]
         
         logger.info(f"Concatenating {len(input_files)} videos to {output_path}")
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True)
         
+        if result.returncode != 0:
+            logger.error(f"Error concatenating videos: {result.stderr}")
+            return False
+            
         return True
         
     except subprocess.CalledProcessError as e:
-        logger.error(f"Error concatenating videos: {e.stderr}")
+        logger.error(f"Error in concat_videos: {e.stderr}")
         return False
     except Exception as e:
         logger.error(f"Unexpected error in concat_videos: {str(e)}")
@@ -273,7 +299,7 @@ def extract_segments(
     temp_dir: Optional[Path] = None
 ) -> Optional[Path]:
     """
-    Extract segments from a video file.
+    Extract segments from a video file while maintaining audio-video sync.
     
     Args:
         input_path: Path to the input video file
@@ -288,48 +314,87 @@ def extract_segments(
         logger.warning("No segments provided for extraction")
         return None
     
-    # Create output path if not provided
-    if output_path is None:
-        output_path = input_path.with_stem(f"{input_path.stem}_highlights")
-    
-    # Create temp directory if not provided
     if temp_dir is None:
-        temp_dir = Path(tempfile.mkdtemp(prefix="extract_segments_"))
-    else:
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_dir = Path(tempfile.mkdtemp(prefix='videothingy_'))
     
-    try:
-        segment_files = []
+    # If no output path specified, use a default
+    if output_path is None:
+        output_path = input_path.with_stem(f"{input_path.stem}_highlight")
+    
+    # If only one segment, extract it directly
+    if len(segments) == 1:
+        segment = segments[0]
+        cmd = [
+            'ffmpeg',
+            '-ss', str(segment['start']),
+            '-i', str(input_path),
+            '-t', str(segment['end'] - segment['start']),
+            '-c:v', 'libx264',  # Re-encode video for better compatibility
+            '-c:a', 'aac',      # Re-encode audio for better compatibility
+            '-strict', 'experimental',
+            '-b:a', '192k',     # Higher quality audio
+            '-ar', '48000',     # Standard audio sample rate
+            '-preset', 'fast',  # Faster encoding with good quality
+            '-movflags', '+faststart',
+            '-y',
+            str(output_path)
+        ]
         
-        # Extract each segment
-        for i, segment in enumerate(segments):
-            start = segment['start']
-            duration = segment['end'] - start
-            segment_path = temp_dir / f"segment_{i:04d}{input_path.suffix}"
-            
-            cmd = [
-                'ffmpeg',
-                '-ss', str(start),
-                '-i', str(input_path),
-                '-t', str(duration),
-                '-c', 'copy',
-                '-y',
-                str(segment_path)
-            ]
-            
-            logger.info(f"Extracting segment {i+1}: {start:.2f}s - {segment['end']:.2f}s")
+        logger.info(f"Extracting single segment: {segment['start']:.2f}s - {segment['end']:.2f}s")
+        try:
             subprocess.run(cmd, check=True, capture_output=True, text=True)
-            segment_files.append(segment_path)
-        
-        # If only one segment, just rename it
-        if len(segment_files) == 1:
-            segment_files[0].replace(output_path)
             return output_path
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Error extracting segment: {e.stderr}")
+            return None
+    
+    # For multiple segments, use concat demuxer with proper timestamps
+    try:
+        # Create a file list for concat demuxer
+        concat_file = temp_dir / 'concat_list.txt'
+        with open(concat_file, 'w') as f:
+            for i, segment in enumerate(segments):
+                # Create a temporary segment file
+                segment_file = temp_dir / f'segment_{i:04d}.mp4'
+                
+                # Extract the segment with proper timestamps
+                cmd = [
+                    'ffmpeg',
+                    '-ss', str(segment['start']),
+                    '-i', str(input_path),
+                    '-t', str(segment['end'] - segment['start']),
+                    '-c:v', 'libx264',
+                    '-c:a', 'aac',
+                    '-strict', 'experimental',
+                    '-b:a', '192k',
+                    '-ar', '48000',
+                    '-preset', 'fast',
+                    '-movflags', '+faststart',
+                    '-y',
+                    str(segment_file)
+                ]
+                
+                logger.info(f"Extracting segment {i+1}: {segment['start']:.2f}s - {segment['end']:.2f}s")
+                subprocess.run(cmd, check=True, capture_output=True, text=True)
+                
+                # Add to concat list
+                f.write(f"file '{segment_file.absolute()}'\n")
         
-        # Otherwise, concatenate the segments
-        if concat_videos(segment_files, output_path, temp_dir):
-            return output_path
-        return None
+        # Concatenate segments using concat demuxer
+        concat_cmd = [
+            'ffmpeg',
+            '-f', 'concat',
+            '-safe', '0',
+            '-i', str(concat_file),
+            '-c', 'copy',  # Stream copy is safe because we re-encoded all segments the same way
+            '-y',
+            str(output_path)
+        ]
+        
+        logger.info(f"Concatenating {len(segments)} segments to {output_path}")
+        subprocess.run(concat_cmd, check=True, capture_output=True, text=True)
+        
+        return output_path
         
     except subprocess.CalledProcessError as e:
         logger.error(f"Error extracting segments: {e.stderr}")

@@ -22,13 +22,30 @@ class HighlightDetector(VideoProcessor):
     making it ideal for creating more engaging video highlights.
     """
     
+    # List of plant names and related terms to preserve context around
+    PLANT_NAMES = {
+        'cilantro', 'murisaki', 'sweet potato', 'comfrey', 'shiso', 'marigold',
+        'basil', 'tomato', 'pepper', 'lettuce', 'kale', 'spinach', 'arugula',
+        'herb', 'vegetable', 'flower', 'plant', 'seedling', 'sprout'
+    }
+    
+    # Status words that indicate plant condition
+    STATUS_WORDS = {
+        'growing', 'thriving', 'dying', 'sprouting', 'flowering', 'fruiting',
+        'wilting', 'recovering', 'healthy', 'unhealthy', 'pest', 'disease',
+        'harvest', 'yield', 'bloom', 'wilt'
+    }
+    
     def __init__(
         self,
-        min_duration: float = 3.0,           # Minimum highlight duration in seconds
-        max_duration: float = 15.0,          # Maximum highlight duration in seconds
-        min_silence_len: int = 500,          # Minimum silence length in ms to consider for cutting
-        silence_thresh: int = -40,           # Silence threshold in dB (lower = more sensitive)
-        keep_silence: int = 200,             # Keep this much silence around cuts (ms)
+        min_duration: float = 5.0,           # Minimum highlight duration in seconds
+        max_duration: float = 20.0,          # Increased max duration for plant discussions
+        min_silence_len: int = 1500,         # Increased to avoid cutting mid-sentence
+        silence_thresh: int = -32,           # Slightly more sensitive to avoid cutting quiet speech
+        keep_silence: int = 500,             # Increased silence padding for natural pauses
+        min_highlight_duration: int = 30,     # Target minimum total highlight duration
+        always_include_first: int = 20,       # First N seconds to always include
+        plant_context_buffer: float = 2.0,    # Seconds to add before/after plant mentions
     ):
         """
         Initialize the highlight detector with processing parameters.
@@ -45,6 +62,9 @@ class HighlightDetector(VideoProcessor):
         self.min_silence_len = min_silence_len
         self.silence_thresh = silence_thresh
         self.keep_silence = keep_silence
+        self.min_highlight_duration = min_highlight_duration
+        self.always_include_first = always_include_first
+        self.plant_context_buffer = plant_context_buffer
     
     @property
     def name(self) -> str:
@@ -212,13 +232,136 @@ class HighlightDetector(VideoProcessor):
         
         for i, seg in enumerate(result, 1):
             seg_duration = seg.get("duration", seg.get("end", 0) - seg.get("start", 0))
-            logger.info(f"  Segment {i}: {seg.get('start', 0):.2f}s - {seg.get('end', 0):.2f}s (duration: {seg_duration:.2f}s) [{seg.get('type', 'normal')}]")
+            logger.info(f"  Segment {i}: {seg.get('start', 0):.2f}s - {seg.get('end', 0):.2f} (duration: {seg_duration:.2f}s) [{seg.get('type', 'normal')}]")
         
         return result
         
-    def process(self, input_path: Path, output_path: Path, **kwargs) -> Dict:
+    def _create_initial_segment(self, duration: float) -> List[Dict]:
+        """Create the initial segment that should always be included."""
+        # Always include first N seconds (or entire video if shorter)
+        first_segment_end = min(self.always_include_first, duration)
+        return [{
+            'start': 0.0,
+            'end': first_segment_end,
+            'type': 'initial_segment',
+            'priority': 1  # Highest priority
+        }]
+    
+    def _find_plant_mentions(self, transcription: List[Dict]) -> List[Dict]:
+        """Find segments where plants or their status are mentioned."""
+        plant_segments = []
+        
+        for segment in transcription:
+            text = segment.get('text', '').lower()
+            start = segment.get('start', 0)
+            end = segment.get('end', 0)
+            
+            # Check for plant names or status words
+            has_plant = any(plant in text for plant in self.PLANT_NAMES)
+            has_status = any(status in text for status in self.STATUS_WORDS)
+            
+            if has_plant or has_status:
+                # Add buffer around plant mentions
+                buffered_start = max(0, start - self.plant_context_buffer)
+                buffered_end = min(segment.get('duration', duration), end + self.plant_context_buffer)
+                
+                plant_segments.append({
+                    'start': buffered_start,
+                    'end': buffered_end,
+                    'type': 'plant_mention',
+                    'priority': 0.8,  # High priority to keep plant context
+                    'reason': 'Plant name/status mentioned'
+                })
+        
+        return plant_segments
+    
+    def _analyze_content(self, input_path: str, duration: float, transcription: List[Dict] = None) -> List[Dict]:
+        """Analyze video content to find important segments."""
+        segments = []
+        
+        # If video is short, just return the whole thing
+        if duration <= self.min_highlight_duration:
+            return [{'start': 0, 'end': duration, 'type': 'full_video', 'priority': 1}]
+        
+        # Add plant mentions if transcription is available
+        if transcription:
+            plant_segments = self._find_plant_mentions(transcription)
+            segments.extend(plant_segments)
+        
+        # Sample from the video at regular intervals, but avoid overlapping with plant segments
+        sample_interval = min(15, duration / 4)  # Sample every 15s or divide video into 4 parts
+        
+        for i in range(0, int(duration), int(sample_interval)):
+            if i + self.min_duration > duration:
+                break
+                
+            # Create segment with some overlap
+            segment_start = max(0, i - 2.0)  # Start 2s earlier for context
+            segment_end = min(duration, i + self.min_duration + 2.0)  # End 2s later for context
+            
+            segments.append({
+                'start': float(segment_start),
+                'end': float(segment_end),
+                'type': 'sampled_segment',
+                'priority': 0.4  # Lower priority than plant mentions
+            })
+        
+        return segments
+    
+    def _merge_segments(self, segments: List[Dict], duration: float) -> List[Dict]:
+        """Merge and prioritize segments to create final highlight segments."""
+        if not segments:
+            return []
+            
+        # Sort segments by start time first
+        segments.sort(key=lambda x: x['start'])
+        
+        merged = []
+        
+        for seg in segments:
+            if not merged:
+                merged.append(seg)
+                continue
+                
+            last = merged[-1]
+            
+            # Calculate gap between segments
+            gap = seg['start'] - last['end']
+            
+            # If segments are close or overlapping, merge them
+            if gap <= 5.0:  # 5 second maximum gap to merge
+                # Extend the end time to include the new segment
+                last['end'] = max(last['end'], seg['end'])
+                
+                # Update type and priority
+                if seg.get('priority', 0) > last.get('priority', 0):
+                    last['type'] = seg['type']
+                    last['priority'] = seg['priority']
+                elif seg.get('priority', 0) == last.get('priority', 0):
+                    last['type'] = 'merged_segment'
+                
+                # Preserve any additional metadata from higher priority segments
+                if seg.get('reason'):
+                    last['reason'] = seg['reason']
+            else:
+                # If segments are far apart, add as new segment
+                merged.append(seg)
+        
+        # Ensure we don't exceed max duration for any segment
+        for seg in merged:
+            seg_duration = seg['end'] - seg['start']
+            if seg_duration > self.max_duration:
+                # If segment is too long, take the middle portion
+                mid = (seg['start'] + seg['end']) / 2
+                seg['start'] = mid - (self.max_duration / 2)
+                seg['end'] = mid + (self.max_duration / 2)
+                seg['type'] = 'trimmed_segment'
+        
+        return merged
+    
+    def process(self, input_path: Path, output_path: Path = None, transcription: List[Dict] = None, **kwargs) -> Dict:
         """
-        Process a video to detect and remove silent segments.
+        Process a video to create highlight segments.
         
         Args:
             video_path: Path to the video file
@@ -231,7 +374,7 @@ class HighlightDetector(VideoProcessor):
                 - total_duration: Total duration of the original video
                 - message: Error message if status is "error"
         """
-        logger.info(f"Detecting silent segments in {input_path}")
+        logger.info(f"Processing video for highlights: {input_path}")
         
         try:
             # Get video info from kwargs or get it ourselves
@@ -248,44 +391,86 @@ class HighlightDetector(VideoProcessor):
             if 'duration' not in video_info or not video_info['duration']:
                 raise ValueError("Could not determine video duration")
             
-            logger.info(f"Video duration: {video_info['duration']:.2f} seconds")
+            duration = video_info['duration']
+            logger.info(f"Video duration: {duration:.2f}s")
             
-            # Detect silent segments
-            logger.info("Detecting silent segments...")
-            silent_segments = self._detect_silent_segments(input_path)
-            logger.info(f"Detected {len(silent_segments)} silent segments")
+            # Step 1: Always include the first N seconds
+            initial_segment = self._create_initial_segment(duration)
             
-            # Convert silent segments to keep segments (invert the selection)
-            logger.info("Inverting silent segments to get keep segments...")
-            keep_segments = self._invert_silent_segments(
-                silent_segments, 
-                video_info.get('duration', 0)
-            )
-            logger.info(f"Found {len(keep_segments)} segments to keep")
+            # Step 2: Analyze content to find important segments, including plant mentions
+            content_segments = self._analyze_content(str(input_path), duration, transcription)
+            
+            # Step 3: Combine and prioritize segments
+            all_segments = initial_segment + content_segments
+            keep_segments = self._merge_segments(all_segments, duration)
+            
+            # Ensure we have at least the initial segment
+            if not keep_segments and initial_segment:
+                keep_segments = initial_segment
+                
+            logger.info(f"Final selection: {len(keep_segments)} segments")
+            for i, seg in enumerate(keep_segments, 1):
+                seg_duration = seg['end'] - seg['start']
+                logger.info(f"  Segment {i}: {seg['start']:.1f}s - {seg['end']:.1f}s "
+                           f"({seg_duration:.1f}s) [{seg.get('type', 'unknown')}]")
+            
+            total_duration = sum(s['end'] - s['start'] for s in keep_segments)
+            logger.info(f"Total highlight duration: {total_duration:.1f}s")
             
             # If there's an output path, process the video to extract highlights
-            if output_path:
-                if keep_segments:
+            if output_path and keep_segments:
+                try:
                     logger.info(f"Extracting {len(keep_segments)} segments to {output_path}")
                     from ..utils.video_utils import extract_segments
+                    
+                    # Ensure we have at least min_highlight_duration of content
+                    total_duration = sum(s['end'] - s['start'] for s in keep_segments)
+                    if total_duration < self.min_highlight_duration and duration > self.min_highlight_duration:
+                        logger.warning(f"Highlight duration ({total_duration:.1f}s) is less than minimum target "
+                                     f"({self.min_highlight_duration}s), adding more content")
+                        # Add more content from the middle of the video
+                        mid_point = duration / 2
+                        extra_duration = self.min_highlight_duration - total_duration
+                        extra_start = max(0, mid_point - (extra_duration / 2))
+                        extra_end = min(duration, mid_point + (extra_duration / 2))
+                        
+                        keep_segments.append({
+                            'start': extra_start,
+                            'end': extra_end,
+                            'type': 'extra_content',
+                            'priority': 0.3
+                        })
+                        
+                        # Re-merge segments to handle any overlaps
+                        keep_segments = self._merge_segments(keep_segments, duration)
+                    
+                    extract_segments(
+                        input_path=input_path,
+                        segments=keep_segments,
+                        output_path=output_path
+                    )
+                    logger.info("Successfully extracted segments")
+                    
+                except Exception as e:
+                    logger.error(f"Error extracting segments: {e}", exc_info=True)
+                    # If extraction fails, try with just the first 30 seconds
+                    logger.warning("Falling back to first 30 seconds")
                     try:
                         extract_segments(
                             input_path=input_path,
-                            segments=keep_segments,
+                            segments=[{'start': 0, 'end': min(30, duration), 'type': 'fallback'}],
                             output_path=output_path
                         )
-                        logger.info("Successfully extracted segments")
-                    except Exception as e:
-                        logger.error(f"Error extracting segments: {e}", exc_info=True)
-                        raise
-                else:
-                    logger.warning("No segments to extract, skipping video extraction")
+                        keep_segments = [{'start': 0, 'end': min(30, duration), 'type': 'fallback'}]
+                    except Exception as fallback_error:
+                        logger.error(f"Fallback extraction failed: {fallback_error}", exc_info=True)
+                        raise e from fallback_error
             
             return {
                 "status": "success" if keep_segments else "no_highlights",
                 "segments": keep_segments,
-                "total_duration": video_info.get('duration', 0),
-                "message": "No highlight segments found" if not keep_segments else None
+                "total_duration": duration,
+                "message": None if keep_segments else "No highlight segments found"
             }
         
         except Exception as e:
