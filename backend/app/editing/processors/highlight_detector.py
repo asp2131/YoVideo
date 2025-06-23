@@ -1,14 +1,21 @@
 """
-Highlight Detector for Video Processing
+Enhanced Multi-Modal Highlight Detector
 
-This module provides functionality to detect and remove silent segments from videos,
-creating more engaging content by focusing on the most relevant parts.
+This module provides an advanced highlight detector that combines:
+- Audio analysis (energy, speech patterns, music)
+- Visual analysis (scene changes, motion, plant detection)
+- Content analysis (transcription, gardening keywords, sentiment)
 """
 import logging
+import numpy as np
 from pathlib import Path
-from typing import Dict, List, Optional
-
-from pydub import AudioSegment, silence
+from typing import Dict, List, Optional, Tuple, Any
+import cv2
+import librosa
+from textblob import TextBlob
+import re
+import json
+from scipy.signal import find_peaks
 
 from app.editing.core.processor import VideoProcessor
 
@@ -16,36 +23,48 @@ logger = logging.getLogger(__name__)
 
 class HighlightDetector(VideoProcessor):
     """
-    A processor that identifies and removes silent segments from videos.
-    
-    This detector focuses on audio analysis to find and remove silent portions,
-    making it ideal for creating more engaging video highlights.
+    Advanced highlight detector optimized for gardening videos with plant-specific features.
+    Combines audio, visual, and content analysis to identify engaging moments.
     """
     
-    # List of plant names and related terms to preserve context around
-    PLANT_NAMES = {
-        'cilantro', 'murisaki', 'sweet potato', 'comfrey', 'shiso', 'marigold',
-        'basil', 'tomato', 'pepper', 'lettuce', 'kale', 'spinach', 'arugula',
-        'herb', 'vegetable', 'flower', 'plant', 'seedling', 'sprout'
+    # Content keywords that indicate important moments
+    ENGAGEMENT_KEYWORDS = {
+        'high_energy': ['excited', 'amazing', 'incredible', 'wow', 'awesome', 'fantastic'],
+        'instructional': ['how to', 'step', 'first', 'next', 'then', 'finally', 'important'],
+        'emotional': ['love', 'hate', 'feel', 'happy', 'sad', 'frustrated', 'proud'],
+        'conclusion': ['summary', 'conclusion', 'finally', 'in summary', 'to wrap up'],
+        'question': ['what', 'how', 'why', 'when', 'where', 'which'],
+        'emphasis': ['really', 'very', 'extremely', 'absolutely', 'definitely', 'obviously']
     }
     
-    # Status words that indicate plant condition
-    STATUS_WORDS = {
-        'growing', 'thriving', 'dying', 'sprouting', 'flowering', 'fruiting',
-        'wilting', 'recovering', 'healthy', 'unhealthy', 'pest', 'disease',
-        'harvest', 'yield', 'bloom', 'wilt'
+    # Gardening-specific keywords
+    GARDENING_KEYWORDS = {
+        'plant_health': ['healthy', 'wilting', 'thriving', 'dying', 'pest', 'disease'],
+        'garden_tasks': ['planting', 'watering', 'harvesting', 'pruning', 'fertilizing'],
+        'plant_species': ['cilantro', 'sweet potato', 'comfrey', 'shiso', 'marigold', 'basil'],
+        'garden_conditions': ['sunlight', 'soil', 'compost', 'mulch', 'drainage']
     }
+    
+    # Visual analysis parameters
+    VISUAL_ANALYSIS_INTERVAL = 0.5  # seconds between frames for analysis
+    MIN_PLANT_RATIO = 0.1  # Minimum green pixel ratio to consider as plant
+    MOTION_THRESHOLD = 30  # Threshold for motion detection
     
     def __init__(
         self,
         min_duration: float = 5.0,           # Minimum highlight duration in seconds
-        max_duration: float = 20.0,          # Increased max duration for plant discussions
-        min_silence_len: int = 1500,         # Increased to avoid cutting mid-sentence
-        silence_thresh: int = -32,           # Slightly more sensitive to avoid cutting quiet speech
-        keep_silence: int = 500,             # Increased silence padding for natural pauses
-        min_highlight_duration: int = 30,     # Target minimum total highlight duration
-        always_include_first: int = 20,       # First N seconds to always include
-        plant_context_buffer: float = 2.0,    # Seconds to add before/after plant mentions
+        max_duration: float = 20.0,          # Maximum highlight duration in seconds
+        min_silence_len: int = 1500,         # Minimum silence length in ms for cuts
+        silence_thresh: int = -32,           # Silence threshold in dB
+        keep_silence: int = 500,             # How much silence to keep around cuts (ms)
+        min_highlight_duration: int = 30,    # Target minimum total highlight duration
+        always_include_first: int = 20,      # First N seconds to always include
+        plant_context_buffer: float = 2.0,   # Seconds to add around plant mentions
+        audio_weight: float = 0.3,           # Weight for audio features
+        visual_weight: float = 0.4,          # Weight for visual features
+        content_weight: float = 0.3,         # Weight for content features
+        analysis_interval: float = 0.5,      # Seconds between analysis frames
+        use_gpu: bool = False,               # Use GPU acceleration if available
     ):
         """
         Initialize the highlight detector with processing parameters.
@@ -65,11 +84,504 @@ class HighlightDetector(VideoProcessor):
         self.min_highlight_duration = min_highlight_duration
         self.always_include_first = always_include_first
         self.plant_context_buffer = plant_context_buffer
+        
+        # Feature weights (normalized to sum to 1)
+        total_weight = audio_weight + visual_weight + content_weight
+        self.audio_weight = audio_weight / total_weight
+        self.visual_weight = visual_weight / total_weight
+        self.content_weight = content_weight / total_weight
+        
+        # Analysis settings
+        self.analysis_interval = analysis_interval
+        self.use_gpu = use_gpu and cv2.cuda.getCudaEnabledDeviceCount() > 0
+        
+        # Initialize models
+        try:
+            self.face_cascade = cv2.CascadeClassifier(
+                cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            )
+            if self.use_gpu:
+                logger.info("CUDA is available - using GPU acceleration")
+                self.gpu_frame = cv2.cuda_GpuMat()
+            else:
+                logger.info("Using CPU for visual analysis")
+        except Exception as e:
+            logger.warning(f"Could not initialize face detection: {e}")
+            self.face_cascade = None
     
     @property
     def name(self) -> str:
         """Return the name identifier for this processor."""
-        return "highlight_detector"
+        return "enhanced_highlight_detector"
+        
+    def _analyze_audio(self, video_path: Path) -> Dict:
+        """
+        Analyze audio features to detect important moments.
+        
+        Args:
+            video_path: Path to the video file
+            
+        Returns:
+            Dictionary containing audio analysis features
+        """
+        logger.info("Analyzing audio features...")
+        
+        try:
+            # Load audio
+            y, sr = librosa.load(str(video_path), sr=None)
+            
+            # 1. Energy analysis
+            hop_length = 512
+            frame_length = 2048
+            
+            # RMS energy
+            rms = librosa.feature.rms(y=y, frame_length=frame_length, hop_length=hop_length)[0]
+            
+            # Spectral centroid (brightness)
+            spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
+            
+            # Zero crossing rate (speech vs music indicator)
+            zcr = librosa.feature.zero_crossing_rate(y, frame_length=frame_length, hop_length=hop_length)[0]
+            
+            # Tempo and beat tracking
+            tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
+            
+            # Convert frame indices to time
+            times = librosa.frames_to_time(np.arange(len(rms)), sr=sr, hop_length=hop_length)
+            beat_times = librosa.frames_to_time(beats, sr=sr)
+            
+            # Find energy peaks
+            energy_threshold = np.percentile(rms, 75)  # Top 25% energy moments
+            peaks, _ = find_peaks(rms, height=energy_threshold, distance=sr//hop_length)
+            peak_times = times[peaks]
+            
+            # Detect speech segments
+            speech_segments = self._detect_speech_segments(y, sr, zcr, times)
+            
+            return {
+                'energy_peaks': peak_times.tolist(),
+                'rms_energy': rms.tolist(),
+                'spectral_centroid': spectral_centroid.tolist(),
+                'zcr': zcr.tolist(),
+                'times': times.tolist(),
+                'tempo': float(tempo),
+                'beat_times': beat_times.tolist(),
+                'speech_segments': speech_segments,
+                'duration': len(y) / sr
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in audio analysis: {e}")
+            return {}
+            
+    def _detect_speech_segments(self, y: np.ndarray, sr: int, zcr: np.ndarray, 
+                           times: np.ndarray) -> List[Dict]:
+        """Detect segments that likely contain speech vs music."""
+        # Speech typically has higher zero-crossing rate than music
+        speech_threshold = np.median(zcr)
+        is_speech = zcr > speech_threshold
+        
+        # Group consecutive speech frames
+        segments = []
+        start_idx = None
+        
+        for i, speech in enumerate(is_speech):
+            if speech and start_idx is None:
+                start_idx = i
+            elif not speech and start_idx is not None:
+                if i - start_idx > 10:  # Minimum length
+                    segments.append({
+                        'start': times[start_idx],
+                        'end': times[i],
+                        'type': 'speech'
+                    })
+                start_idx = None
+        
+        return segments
+        
+    def _analyze_visual(self, video_path: Path) -> Dict:
+        """
+        Analyze visual features to detect important moments.
+        
+        Args:
+            video_path: Path to the video file
+            
+        Returns:
+            Dictionary containing visual analysis features
+        """
+        logger.info("Analyzing visual features...")
+        
+        try:
+            cap = cv2.VideoCapture(str(video_path))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            duration = frame_count / fps
+            
+            # Sample frames at regular intervals
+            sample_interval = max(1, int(fps * self.analysis_interval))
+            
+            frames = []
+            frame_times = []
+            prev_gray = None
+            scene_changes = []
+            motion_scores = []
+            face_detections = []
+            plant_frames = []
+            
+            frame_idx = 0
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                
+                if frame_idx % sample_interval == 0:
+                    current_time = frame_idx / fps
+                    
+                    # Convert to grayscale for analysis
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    
+                    # Scene change detection
+                    if prev_gray is not None:
+                        # Calculate histogram difference
+                        hist_diff = cv2.compareHist(
+                            cv2.calcHist([prev_gray], [0], None, [256], [0, 256]),
+                            cv2.calcHist([gray], [0], None, [256], [0, 256]),
+                            cv2.HISTCMP_CORREL
+                        )
+                        
+                        # Scene change if correlation is low
+                        if hist_diff < 0.7:  # Threshold for scene change
+                            scene_changes.append(current_time)
+                        
+                        # Motion detection
+                        frame_diff = cv2.absdiff(prev_gray, gray)
+                        motion_score = np.mean(frame_diff)
+                        motion_scores.append({
+                            'time': current_time,
+                            'score': float(motion_score)
+                        })
+                    
+                    # Face detection
+                    if self.face_cascade is not None:
+                        faces = self.face_cascade.detectMultiScale(gray, 1.1, 4)
+                        if len(faces) > 0:
+                            face_detections.append({
+                                'time': current_time,
+                                'face_count': len(faces),
+                                'largest_face_area': max([w*h for (x,y,w,h) in faces])
+                            })
+                    
+                    # Plant detection (green pixel ratio)
+                    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+                    lower_green = np.array([25, 40, 40])
+                    upper_green = np.array([90, 255, 255])
+                    mask = cv2.inRange(hsv, lower_green, upper_green)
+                    green_ratio = np.sum(mask > 0) / (frame.shape[0] * frame.shape[1])
+                    
+                    if green_ratio > self.MIN_PLANT_RATIO:
+                        plant_frames.append({
+                            'time': current_time,
+                            'green_ratio': float(green_ratio)
+                        })
+                    
+                    prev_gray = gray
+                    frame_times.append(current_time)
+                
+                frame_idx += 1
+            
+            cap.release()
+            
+            return {
+                'scene_changes': scene_changes,
+                'motion_scores': motion_scores,
+                'face_detections': face_detections,
+                'plant_frames': plant_frames,
+                'frame_times': frame_times,
+                'duration': duration,
+                'fps': fps
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in visual analysis: {e}")
+            return {}
+            
+    def _analyze_content(self, transcription: List[Dict]) -> Dict:
+        """
+        Analyze transcription content for important moments.
+        
+        Args:
+            transcription: List of transcription segments from Whisper
+            
+        Returns:
+            Dictionary containing content analysis features
+        """
+        logger.info("Analyzing content features...")
+        
+        if not transcription:
+            return {}
+        
+        try:
+            keywords_found = []
+            sentiment_scores = []
+            speaking_rates = []
+            
+            for segment in transcription:
+                text = segment.get('text', '').lower()
+                start_time = segment.get('start', 0)
+                end_time = segment.get('end', 0)
+                duration = end_time - start_time
+                
+                # Keyword detection
+                for category, words in {**self.ENGAGEMENT_KEYWORDS, **self.GARDENING_KEYWORDS}.items():
+                    for keyword in words:
+                        if keyword in text:
+                            keywords_found.append({
+                                'keyword': keyword,
+                                'category': category,
+                                'time': start_time,
+                                'text': text
+                            })
+                
+                # Sentiment analysis
+                if text.strip():
+                    blob = TextBlob(text)
+                    sentiment_scores.append({
+                        'time': start_time,
+                        'polarity': float(blob.sentiment.polarity),
+                        'subjectivity': float(blob.sentiment.subjectivity)
+                    })
+                
+                # Speaking rate (words per second)
+                word_count = len(text.split())
+                if duration > 0:
+                    speaking_rate = word_count / duration
+                    speaking_rates.append({
+                        'time': start_time,
+                        'rate': speaking_rate,
+                        'word_count': word_count
+                    })
+            
+            # Find emphasis moments (questions, exclamations)
+            emphasis_moments = []
+            for segment in transcription:
+                text = segment.get('text', '')
+                start_time = segment.get('start', 0)
+                
+                # Count questions and exclamations
+                question_count = text.count('?')
+                exclamation_count = text.count('!')
+                caps_words = len(re.findall(r'\b[A-Z]{2,}\b', text))
+                
+                if question_count > 0 or exclamation_count > 0 or caps_words > 0:
+                    emphasis_moments.append({
+                        'time': start_time,
+                        'questions': question_count,
+                        'exclamations': exclamation_count,
+                        'caps_words': caps_words
+                    })
+            
+            return {
+                'keywords': keywords_found,
+                'sentiment_scores': sentiment_scores,
+                'speaking_rates': speaking_rates,
+                'emphasis_moments': emphasis_moments
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in content analysis: {e}")
+            return {}
+    
+    def _score_segments(
+        self,
+        segments: List[Dict],
+        audio_features: Dict,
+        visual_features: Dict,
+        content_features: Dict
+    ) -> List[Dict]:
+        """
+        Score segments based on audio, visual, and content features.
+        
+        Args:
+            segments: List of candidate segments
+            audio_features: Audio analysis results
+            visual_features: Visual analysis results
+            content_features: Content analysis results
+            
+        Returns:
+            List of segments with scores
+        """
+        logger.info("Scoring segments based on multi-modal features...")
+        
+        scored_segments = []
+        
+        for segment in segments:
+            start_time = segment.get('start', 0)
+            end_time = segment.get('end', 0)
+            duration = end_time - start_time
+            
+            if duration <= 0:
+                continue
+                
+            score = 0.0
+            
+            # Audio scoring
+            if audio_features:
+                # Energy peaks in this segment
+                energy_peaks = [t for t in audio_features.get('energy_peaks', []) 
+                              if start_time <= t <= end_time]
+                score += len(energy_peaks) * 0.1 * self.audio_weight
+                
+                # Average energy in this segment
+                times = np.array(audio_features.get('times', []))
+                rms_energy = np.array(audio_features.get('rms_energy', []))
+                
+                mask = (times >= start_time) & (times <= end_time)
+                if np.any(mask):
+                    avg_energy = np.mean(rms_energy[mask])
+                    score += avg_energy * 0.2 * self.audio_weight
+                
+                # Speech segments
+                speech_segments = audio_features.get('speech_segments', [])
+                speech_overlap = sum(
+                    max(0, min(seg['end'], end_time) - max(seg['start'], start_time))
+                    for seg in speech_segments
+                    if seg['start'] < end_time and seg['end'] > start_time
+                )
+                score += (speech_overlap / duration) * 0.1 * self.audio_weight
+            
+            # Visual scoring
+            if visual_features:
+                # Scene changes
+                scene_changes = [t for t in visual_features.get('scene_changes', [])
+                               if start_time <= t <= end_time]
+                score += len(scene_changes) * 0.05 * self.visual_weight
+                
+                # Motion
+                motion_scores = visual_features.get('motion_scores', [])
+                segment_motion = [m['score'] for m in motion_scores 
+                                if start_time <= m['time'] <= end_time]
+                if segment_motion:
+                    avg_motion = np.mean(segment_motion)
+                    score += avg_motion * 0.001 * self.visual_weight
+                
+                # Face presence
+                face_detections = visual_features.get('face_detections', [])
+                faces_in_segment = [f for f in face_detections 
+                                  if start_time <= f['time'] <= end_time]
+                if faces_in_segment:
+                    score += len(faces_in_segment) * 0.1 * self.visual_weight
+                
+                # Plant content
+                plant_frames = visual_features.get('plant_frames', [])
+                plant_in_segment = [p for p in plant_frames
+                                  if start_time <= p['time'] <= end_time]
+                if plant_in_segment:
+                    avg_green = np.mean([p['green_ratio'] for p in plant_in_segment])
+                    score += avg_green * 0.15 * self.visual_weight
+            
+            # Content scoring
+            if content_features:
+                # Keywords
+                keywords = content_features.get('keywords', [])
+                segment_keywords = [k for k in keywords 
+                                  if start_time <= k['time'] <= end_time]
+                
+                # Weight different keyword categories
+                keyword_weights = {
+                    'high_energy': 0.3,
+                    'instructional': 0.2,
+                    'emotional': 0.25,
+                    'conclusion': 0.15,
+                    'question': 0.2,
+                    'emphasis': 0.1,
+                    'plant_health': 0.4,  # Higher weight for plant health
+                    'garden_tasks': 0.35,
+                    'plant_species': 0.3,
+                    'garden_conditions': 0.25
+                }
+                
+                for keyword in segment_keywords:
+                    weight = keyword_weights.get(keyword['category'], 0.1)
+                    score += weight * self.content_weight
+                
+                # Sentiment (prefer positive or highly negative - both engaging)
+                sentiment_scores = content_features.get('sentiment_scores', [])
+                segment_sentiment = [s['polarity'] for s in sentiment_scores
+                                   if start_time <= s['time'] <= end_time]
+                if segment_sentiment:
+                    avg_sentiment = np.mean([abs(s) for s in segment_sentiment])
+                    score += avg_sentiment * 0.1 * self.content_weight
+                
+                # Speaking rate (prefer moderate to fast)
+                speaking_rates = content_features.get('speaking_rates', [])
+                segment_rates = [r['rate'] for r in speaking_rates
+                               if start_time <= r['time'] <= end_time]
+                if segment_rates:
+                    avg_rate = np.mean(segment_rates)
+                    # Optimal speaking rate is around 2-4 words per second
+                    if 2 <= avg_rate <= 4:
+                        score += 0.1 * self.content_weight
+                    elif avg_rate > 4:  # Fast speech can be engaging
+                        score += 0.05 * self.content_weight
+                
+                # Emphasis moments
+                emphasis_moments = content_features.get('emphasis_moments', [])
+                segment_emphasis = [e for e in emphasis_moments
+                                  if start_time <= e['time'] <= end_time]
+                for emphasis in segment_emphasis:
+                    score += (emphasis['questions'] + emphasis['exclamations'] + 
+                             emphasis['caps_words']) * 0.05 * self.content_weight
+            
+            # Add score to segment
+            segment['score'] = score
+            scored_segments.append(segment)
+        
+        return scored_segments
+    
+    def _select_best_segments(
+        self, 
+        segments: List[Dict], 
+        target_duration: float,
+        min_segments: int = 1
+    ) -> List[Dict]:
+        """
+        Select the best segments to include in the final highlight.
+        
+        Args:
+            segments: List of scored segments
+            target_duration: Target total duration in seconds
+            min_segments: Minimum number of segments to include
+            
+        Returns:
+            List of selected segments
+        """
+        if not segments:
+            return []
+        
+        # Sort segments by score (highest first)
+        sorted_segments = sorted(segments, key=lambda x: x.get('score', 0), reverse=True)
+        
+        selected = []
+        total_duration = 0
+        
+        # Always include the highest scoring segments first
+        for segment in sorted_segments:
+            if total_duration >= target_duration and len(selected) >= min_segments:
+                break
+                
+            segment_duration = segment['end'] - segment['start']
+            
+            # Skip if adding this segment would exceed target duration
+            if total_duration + segment_duration > target_duration and len(selected) >= min_segments:
+                continue
+                
+            selected.append(segment)
+            total_duration += segment_duration
+        
+        # Sort selected segments by time
+        selected.sort(key=lambda x: x['start'])
+        
+        return selected
     
     def _invert_silent_segments(
         self, 

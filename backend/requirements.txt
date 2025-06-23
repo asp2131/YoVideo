@@ -17,6 +17,7 @@ whisper
 ffmpeg-python==0.2.0
 torch>=2.0.0
 numpy>=1.24.0
+scipy>=1.10.0
 
 # Video Editing
 opencv-python>=4.8.0
@@ -25,3 +26,13 @@ scikit-video>=1.1.11
 scikit-image>=0.22.0
 librosa>=0.10.0
 soundfile>=0.12.1
+
+# Text Processing
+textblob>=0.17.1
+nltk>=3.8.1
+
+# Audio Analysis
+pydub>=0.25.1
+
+# Optional: For GPU acceleration
+# cupy-cuda11x>=11.0.0  # Uncomment and set CUDA version if using GPU

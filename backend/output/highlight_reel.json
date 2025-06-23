@@ -21,11 +21,149 @@
     },
     {
       "start": 58.0,
-      "end": 62.676354,
+      "end": 64.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 73.0,
+      "end": 79.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 88.0,
+      "end": 94.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 103.0,
+      "end": 109.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 118.0,
+      "end": 124.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 133.0,
+      "end": 139.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 148.0,
+      "end": 154.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 163.0,
+      "end": 169.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 178.0,
+      "end": 184.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 193.0,
+      "end": 199.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 208.0,
+      "end": 214.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 223.0,
+      "end": 229.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 238.0,
+      "end": 244.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 253.0,
+      "end": 259.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 268.0,
+      "end": 274.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 283.0,
+      "end": 289.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 298.0,
+      "end": 304.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 313.0,
+      "end": 319.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 328.0,
+      "end": 334.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 343.0,
+      "end": 349.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 358.0,
+      "end": 364.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 373.0,
+      "end": 379.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 388.0,
+      "end": 394.0,
+      "type": "sampled_segment",
+      "priority": 0.4
+    },
+    {
+      "start": 403.0,
+      "end": 409.0,
       "type": "sampled_segment",
       "priority": 0.4
     }
   ],
-  "total_duration": 62.676354,
+  "total_duration": 417.736344,
   "message": null
 }
