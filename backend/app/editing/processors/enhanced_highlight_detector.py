@@ -130,7 +130,7 @@ class EnhancedHighlightDetector(VideoProcessor):
                 if total_duration + segment_duration > self.target_total_duration and total_duration > 0:
                     break
                     
-                # Add segment to highlights
+                # Add segment to highlights with annotations
                 selected_segments.append({
                     'start': segment.start,
                     'end': segment.end,
@@ -143,7 +143,13 @@ class EnhancedHighlightDetector(VideoProcessor):
                         'silence_penalty': score.silence_penalty
                     },
                     'text': getattr(segment, 'text', ''),
-                    'speaker': getattr(segment, 'speaker', None)
+                    'speaker': getattr(segment, 'speaker', None),
+                    'annotations': {
+                        'scene_change': getattr(segment, 'scene_change', False),
+                        'silence_ratio': getattr(segment, 'silence_ratio', 0.0),
+                        'is_silent': getattr(segment, 'is_silent', False),
+                        'scene_boundary': getattr(segment, 'scene_boundary', False)
+                    }
                 })
                 total_duration += segment_duration
             
@@ -166,11 +172,11 @@ class EnhancedHighlightDetector(VideoProcessor):
     def _score_segment(self, segment: Segment, context: Context, 
                       segment_idx: int = 0, total_segments: int = 1) -> HighlightScore:
         """
-        Score a segment based on various features.
+        Score a segment based on various features including scene changes and silence.
         
         Args:
             segment: The segment to score
-            context: Processing context
+            context: Processing context with scene changes and silence info
             segment_idx: Index of the current segment
             total_segments: Total number of segments
             
@@ -179,25 +185,73 @@ class EnhancedHighlightDetector(VideoProcessor):
         """
         score = HighlightScore()
         
+        # Initialize annotations if not present
+        if not hasattr(segment, 'annotations'):
+            segment.annotations = {}
+        
+        # Check for scene changes at segment boundaries
+        if hasattr(context, 'scene_changes'):
+            # Check if this segment starts or ends at a scene boundary
+            scene_boundary = any(
+                abs(segment.start - scene_time) < 0.5 or 
+                abs(segment.end - scene_time) < 0.5
+                for scene_time in context.scene_changes
+            )
+            segment.scene_boundary = scene_boundary
+            segment.annotations['scene_boundary'] = scene_boundary
+            
+            # Check if this segment contains a scene change
+            if hasattr(segment, 'scene_change') and segment.scene_change:
+                score.scene_change = self.scene_change_bonus
+                segment.annotations['scene_change'] = True
+        
+        # Process silence information
+        if hasattr(context, 'silence_segments'):
+            # Calculate silence ratio for this segment
+            silence_duration = 0.0
+            for silence_start, silence_end in context.silence_segments:
+                # Calculate overlap between silence and segment
+                overlap_start = max(segment.start, silence_start)
+                overlap_end = min(segment.end, silence_end)
+                if overlap_start < overlap_end:
+                    silence_duration += (overlap_end - overlap_start)
+            
+            segment_duration = segment.end - segment.start
+            silence_ratio = silence_duration / segment_duration if segment_duration > 0 else 0.0
+            segment.silence_ratio = silence_ratio
+            segment.is_silent = silence_ratio > 0.5  # Consider segment silent if >50% is silence
+            
+            segment.annotations.update({
+                'silence_ratio': silence_ratio,
+                'is_silent': segment.is_silent
+            })
+            
+            # Apply silence penalty
+            if silence_ratio > 0.1:  # Only apply penalty for significant silence
+                score.silence_penalty = silence_ratio * self.silence_penalty
+        
         # Audio features
         if hasattr(segment, 'audio_energy'):
             score.audio = self._normalize(segment.audio_energy) * self.audio_weight
+            # Reduce score for silent segments
+            if getattr(segment, 'is_silent', False):
+                score.audio *= 0.5
         
         # Visual features
         if hasattr(segment, 'visual_activity'):
-            score.visual = self._normalize(segment.visual_activity) * self.visual_weight
+            visual_score = self._normalize(segment.visual_activity)
+            # Boost score for segments at scene boundaries
+            if getattr(segment, 'scene_boundary', False):
+                visual_score = min(1.0, visual_score * 1.2)  # 20% boost
+            score.visual = visual_score * self.visual_weight
         
         # Content features
         if hasattr(segment, 'text') and segment.text:
-            # Simple heuristic: longer text is better
-            score.content = self._normalize(len(segment.text)) * self.content_weight
-        
-        # Scene change bonus
-        if hasattr(segment, 'scene_change') and segment.scene_change:
-            score.scene_change = self.scene_change_bonus
-        
-        # Silence penalty
-        if hasattr(segment, 'silence_ratio'):
+            # Simple heuristic: longer text is better, but penalize silent segments
+            content_score = self._normalize(len(segment.text))
+            if getattr(segment, 'is_silent', False):
+                content_score *= 0.7  # 30% penalty for silent segments
+            score.content = content_score * self.content_weight
             score.silence_penalty = segment.silence_ratio * self.silence_penalty
         
         return score
