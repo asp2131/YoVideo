@@ -1,17 +1,29 @@
 import subprocess
-import json
 import logging
 from pathlib import Path
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Optional
 import tempfile
 import shutil
+from dataclasses import dataclass
 
-from ..core.processor import VideoProcessor, VideoEditingError
+from ..pipeline.core import VideoProcessor, Context, PipelineError
 
 logger = logging.getLogger(__name__)
 
+@dataclass
+class SceneChange:
+    """Represents a scene change in the video."""
+    time: float  # Time in seconds where the scene changes
+    score: float  # Confidence score of the scene change
+
 class SceneDetector(VideoProcessor):
-    """Detects scene changes in a video."""
+    """
+    Detects scene changes in a video and records them in the context.
+    
+    This processor analyzes the video to detect cuts and scene transitions,
+    recording the timestamps where these changes occur. The detected scene
+    changes are stored in the context for use by downstream processors.
+    """
     
     def __init__(self, threshold: float = 30.0, min_scene_len: float = 1.5):
         """
@@ -24,48 +36,47 @@ class SceneDetector(VideoProcessor):
         self.threshold = threshold
         self.min_scene_len = min_scene_len
     
-    @property
-    def name(self) -> str:
-        return "scene_detector"
-    
-    def process(self, input_path: Path, output_path: Path, **kwargs) -> Dict[str, Any]:
+    def process(self, context: Context) -> Context:
         """
-        Detect scenes in the video.
+        Detect scene changes in the video and add them to the context.
         
         Args:
-            input_path: Path to the input video file
-            output_path: Path where the scene information will be saved as JSON
-            **kwargs: Additional parameters
-                - output_video: If True, creates a visualization of scene cuts
+            context: The processing context containing video path and other state
+            
+        Returns:
+            Updated context with scene change information
+            
+        Raises:
+            PipelineError: If scene detection fails
         """
-        logger.info(f"Detecting scenes in {input_path}")
+        video_path = Path(context.video_path)
+        logger.info(f"Detecting scene changes in {video_path}")
         
-        # Get video duration
-        duration = self._get_video_duration(input_path)
-        if duration <= 0:
-            raise VideoEditingError(f"Invalid video duration: {duration}")
-        
-        # Detect scenes using ffmpeg's select filter
-        scenes = self._detect_scenes(input_path)
-        
-        # Filter out very short scenes
-        scenes = self._filter_short_scenes(scenes, duration)
-        
-        # Save scene information
-        scene_info = {
-            'total_scenes': len(scenes),
-            'duration': duration,
-            'scenes': [{'start': start, 'end': end} for start, end in scenes]
-        }
-        
-        with open(output_path, 'w') as f:
-            json.dump(scene_info, f, indent=2)
-        
-        # Optionally create a visualization
-        if kwargs.get('output_video'):
-            self._create_scene_visualization(input_path, output_path.with_suffix('.mp4'), scenes)
-        
-        return scene_info
+        try:
+            # Get video duration
+            duration = self._get_video_duration(video_path)
+            if duration <= 0:
+                raise PipelineError(f"Invalid video duration: {duration}")
+            
+            # Detect scene changes
+            scene_changes = self._detect_scene_changes(video_path)
+            
+            # Filter out very short scenes
+            filtered_changes = self._filter_short_scenes(scene_changes, duration)
+            
+            # Store in context (convert to list of timestamps for backward compatibility)
+            context.scene_changes = [change.time for change in filtered_changes]
+            
+            # Also store full scene change objects if needed
+            context.metadata['scene_changes_detailed'] = [
+                {'time': c.time, 'score': c.score} for c in filtered_changes
+            ]
+            
+            logger.info(f"Detected {len(filtered_changes)} scene changes")
+            return context
+            
+        except Exception as e:
+            raise PipelineError(f"Scene detection failed: {str(e)}") from e
     
     def _get_video_duration(self, input_path: Path) -> float:
         """Get the duration of the input video in seconds."""

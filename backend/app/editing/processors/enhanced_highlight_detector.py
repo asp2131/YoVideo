@@ -5,17 +5,35 @@ A multi-modal processor that identifies highlight-worthy segments in videos
 using a combination of audio, visual, and content analysis.
 """
 import logging
-from typing import Dict, List, Optional, Tuple, Any
-import numpy as np
+from typing import Dict, List, Any, cast
+from dataclasses import dataclass
+from typing import Optional
 
-from ..core.processor import VideoProcessor
+from ..pipeline.core import VideoProcessor, Context, PipelineError, Segment
 
 logger = logging.getLogger(__name__)
+
+@dataclass
+class HighlightScore:
+    """Scores for different aspects of a highlight segment."""
+    audio: float = 0.0
+    visual: float = 0.0
+    content: float = 0.0
+    scene_change: float = 0.0
+    silence_penalty: float = 0.0
+    
+    @property
+    def total(self) -> float:
+        return self.audio + self.visual + self.content + self.scene_change - self.silence_penalty
 
 class EnhancedHighlightDetector(VideoProcessor):
     """
     Enhanced highlight detector that uses multi-modal analysis to identify
     the most engaging segments of a video.
+    
+    This processor analyzes segments from the context and assigns highlight
+    scores based on audio, visual, and content features. It selects the top
+    segments up to a target duration and stores them in the context.
     """
     
     def __init__(
@@ -26,6 +44,8 @@ class EnhancedHighlightDetector(VideoProcessor):
         audio_weight: float = 0.4,
         visual_weight: float = 0.3,
         content_weight: float = 0.3,
+        scene_change_bonus: float = 0.2,
+        silence_penalty: float = 0.3,
         face_detection_enabled: bool = True,
         motion_analysis_enabled: bool = True,
         sentiment_analysis_enabled: bool = True
@@ -40,6 +60,8 @@ class EnhancedHighlightDetector(VideoProcessor):
             audio_weight: Weight for audio features in scoring (0-1)
             visual_weight: Weight for visual features in scoring (0-1)
             content_weight: Weight for content features in scoring (0-1)
+            scene_change_bonus: Bonus score for segments near scene changes
+            silence_penalty: Penalty for segments with high silence ratio
             face_detection_enabled: Whether to perform face detection
             motion_analysis_enabled: Whether to analyze motion
             sentiment_analysis_enabled: Whether to analyze sentiment in text
@@ -47,9 +69,8 @@ class EnhancedHighlightDetector(VideoProcessor):
         self.min_duration = min_duration
         self.max_duration = max_duration
         self.target_total_duration = target_total_duration
-        self.audio_weight = audio_weight
-        self.visual_weight = visual_weight
-        self.content_weight = content_weight
+        self.scene_change_bonus = scene_change_bonus
+        self.silence_penalty = silence_penalty
         self.face_detection_enabled = face_detection_enabled
         self.motion_analysis_enabled = motion_analysis_enabled
         self.sentiment_analysis_enabled = sentiment_analysis_enabled
@@ -57,148 +78,197 @@ class EnhancedHighlightDetector(VideoProcessor):
         # Normalize weights to sum to 1
         total = audio_weight + visual_weight + content_weight
         if total > 0:
-            self.audio_weight /= total
-            self.visual_weight /= total
-            self.content_weight /= total
+            self.audio_weight = audio_weight / total
+            self.visual_weight = visual_weight / total
+            self.content_weight = content_weight / total
+        else:
+            self.audio_weight = 0.33
+            self.visual_weight = 0.33
+            self.content_weight = 0.34
     
-    def process(self, context: Dict, **kwargs) -> Dict:
+    def process(self, context: Context) -> Context:
         """
-        Process the video to detect highlight segments.
+        Process segments to detect highlights.
         
         Args:
-            context: Processing context containing video metadata and data
-            **kwargs: Additional arguments
+            context: The processing context containing segments and features
             
         Returns:
             Updated context with highlight segments
+            
+        Raises:
+            PipelineError: If highlight detection fails
         """
-        logger.info("Starting enhanced highlight detection")
-        
-        # Get video metadata
-        video_path = context.get('video_path')
-        if not video_path:
-            logger.warning("No video path in context, skipping highlight detection")
+        try:
+            logger.info("Starting enhanced highlight detection")
+            
+            if not hasattr(context, 'segments') or not context.segments:
+                logger.warning("No segments found in context, skipping highlight detection")
+                return context
+            
+            # Score each segment
+            scored_segments = []
+            for i, segment in enumerate(context.segments):
+                score = self._score_segment(segment, context, i, len(context.segments))
+                scored_segments.append((segment, score))
+            
+            # Sort by total score (descending)
+            scored_segments.sort(key=lambda x: x[1].total, reverse=True)
+            
+            # Select top segments up to target duration
+            selected_segments = []
+            total_duration = 0.0
+            
+            for segment, score in scored_segments:
+                segment_duration = segment.end - segment.start
+                
+                # Skip segments that are too short or too long
+                if segment_duration < self.min_duration or segment_duration > self.max_duration:
+                    continue
+                    
+                # Check if adding this segment would exceed target duration
+                if total_duration + segment_duration > self.target_total_duration and total_duration > 0:
+                    break
+                    
+                # Add segment to highlights
+                selected_segments.append({
+                    'start': segment.start,
+                    'end': segment.end,
+                    'score': score.total,
+                    'score_details': {
+                        'audio': score.audio,
+                        'visual': score.visual,
+                        'content': score.content,
+                        'scene_change': score.scene_change,
+                        'silence_penalty': score.silence_penalty
+                    },
+                    'text': getattr(segment, 'text', ''),
+                    'speaker': getattr(segment, 'speaker', None)
+                })
+                total_duration += segment_duration
+            
+            # Store results in context
+            context.highlights = selected_segments
+            context.metadata['highlight_selection'] = {
+                'total_duration': total_duration,
+                'segment_count': len(selected_segments),
+                'target_duration': min(self.target_total_duration, total_duration)
+            }
+            
+            logger.info(f"Selected {len(selected_segments)} highlight segments "
+                      f"(total duration: {total_duration:.1f}s)")
+            
             return context
             
-        # Get existing segments or create default ones
-        segments = context.get('segments', [])
-        if not segments:
-            logger.warning("No segments found in context, creating default segments")
-            segments = self._create_default_segments(context)
-        
-        # Score each segment
-        scored_segments = []
-        for i, segment in enumerate(segments):
-            score = self._score_segment(segment, context, i, len(segments))
-            scored_segments.append((segment, score))
-        
-        # Sort by score (descending)
-        scored_segments.sort(key=lambda x: x[1], reverse=True)
-        
-        # Select top segments up to target duration
-        selected_segments = []
-        total_duration = 0.0
-        
-        for segment, score in scored_segments:
-            segment_duration = segment.get('end_time', 0) - segment.get('start_time', 0)
-            if total_duration + segment_duration <= self.target_total_duration:
-                selected_segments.append(segment)
-                total_duration += segment_duration
-            else:
-                # Try to fit part of the segment if possible
-                remaining = self.target_total_duration - total_duration
-                if remaining >= self.min_duration:
-                    segment['end_time'] = segment['start_time'] + remaining
-                    selected_segments.append(segment)
-                    total_duration += remaining
-                break
-        
-        logger.info(f"Selected {len(selected_segments)} highlight segments "
-                   f"(total duration: {total_duration:.1f}s)")
-        
-        # Update context with highlight segments
-        context['highlight_segments'] = selected_segments
-        return context
+        except Exception as e:
+            raise PipelineError(f"Highlight detection failed: {str(e)}") from e
     
-    def _score_segment(self, segment: Dict, context: Dict, 
-                      segment_idx: int, total_segments: int) -> float:
+    def _score_segment(self, segment: Segment, context: Context, 
+                      segment_idx: int = 0, total_segments: int = 1) -> HighlightScore:
         """
-        Score a segment based on multiple features.
+        Score a segment based on various features.
         
         Args:
-            segment: Segment to score
+            segment: The segment to score
             context: Processing context
-            segment_idx: Index of the segment
+            segment_idx: Index of the current segment
             total_segments: Total number of segments
             
         Returns:
-            Score between 0 and 1
+            HighlightScore object with component scores
         """
-        # Base score from segment metadata if available
-        score = segment.get('score', 0.5)
+        score = HighlightScore()
         
-        # Apply audio analysis if available
-        audio_score = 0.0
-        if 'audio_features' in context and self.audio_weight > 0:
-            audio_score = self._analyze_audio(segment, context['audio_features'])
+        # Audio features
+        if hasattr(segment, 'audio_energy'):
+            score.audio = self._normalize(segment.audio_energy) * self.audio_weight
         
-        # Apply visual analysis if available
-        visual_score = 0.0
-        if 'visual_features' in context and self.visual_weight > 0:
-            visual_score = self._analyze_visual(segment, context.get('visual_features', {}))
+        # Visual features
+        if hasattr(segment, 'visual_activity'):
+            score.visual = self._normalize(segment.visual_activity) * self.visual_weight
         
-        # Apply content analysis if available
-        content_score = 0.0
-        if 'transcription' in context and self.content_weight > 0:
-            content_score = self._analyze_content(segment, context['transcription'])
+        # Content features
+        if hasattr(segment, 'text') and segment.text:
+            # Simple heuristic: longer text is better
+            score.content = self._normalize(len(segment.text)) * self.content_weight
         
-        # Combine scores with weights
-        combined_score = (
-            (score * 0.3) +  # Base score (30%)
-            (audio_score * self.audio_weight) +
-            (visual_score * self.visual_weight) +
-            (content_score * self.content_weight)
-        )
+        # Scene change bonus
+        if hasattr(segment, 'scene_change') and segment.scene_change:
+            score.scene_change = self.scene_change_bonus
         
-        # Adjust for position (slight preference for earlier segments)
-        position_factor = 1.0 - (0.2 * (segment_idx / total_segments))
-        combined_score *= position_factor
+        # Silence penalty
+        if hasattr(segment, 'silence_ratio'):
+            score.silence_penalty = segment.silence_ratio * self.silence_penalty
         
-        return combined_score
+        return score
     
-    def _analyze_audio(self, segment: Dict, audio_features: Dict) -> float:
-        """Analyze audio features for the segment."""
-        # Placeholder for audio analysis
-        return 0.5
+    def _normalize(self, value: float, min_val: float = 0.0, max_val: float = 1.0) -> float:
+        """Normalize a value to 0-1 range."""
+        if max_val <= min_val:
+            return 0.0
+        return max(0.0, min(1.0, (value - min_val) / (max_val - min_val)))
     
-    def _analyze_visual(self, segment: Dict, visual_features: Dict) -> float:
-        """Analyze visual features for the segment."""
-        # Placeholder for visual analysis
-        return 0.5
-    
-    def _analyze_content(self, segment: Dict, transcription: List[Dict]) -> float:
-        """Analyze content features for the segment."""
-        # Placeholder for content analysis
-        return 0.5
-    
-    def _create_default_segments(self, context: Dict) -> List[Dict]:
-        """Create default segments if none are provided."""
-        duration = context.get('duration', 0)
-        if duration <= 0:
+    def _create_default_segments(self, context: Context) -> List[Segment]:
+        """
+        Create default segments if none are provided.
+        
+        This is a fallback that creates segments of equal duration.
+        
+        Args:
+            context: The processing context
+            
+        Returns:
+            List of created segments
+        """
+        if not hasattr(context, 'duration') or context.duration <= 0:
             return []
             
-        # Create 5-second segments by default
-        segment_duration = 5.0
-        segments = []
+        segment_count = max(1, int(context.duration / self.max_duration))
+        segment_duration = context.duration / segment_count
         
-        start = 0.0
-        while start < duration:
-            end = min(start + segment_duration, duration)
-            segments.append({
-                'start_time': start,
-                'end_time': end,
-                'score': 0.5
-            })
-            start = end
+        segments = []
+        for i in range(segment_count):
+            start = i * segment_duration
+            end = start + segment_duration if i < segment_count - 1 else context.duration
+            segments.append(Segment(start=start, end=end))
             
         return segments
+    
+    def _analyze_audio(self, segment: Segment, audio_features: Dict[str, Any]) -> float:
+        """
+        Analyze audio features for the segment.
+        
+        Args:
+            segment: The segment to analyze
+            audio_features: Dictionary of audio features
+            
+        Returns:
+            Audio analysis score between 0 and 1
+        """
+        return 0.5  # Placeholder implementation
+    
+    def _analyze_visual(self, segment: Segment, visual_features: Dict[str, Any]) -> float:
+        """
+        Analyze visual features for the segment.
+        
+        Args:
+            segment: The segment to analyze
+            visual_features: Dictionary of visual features
+            
+        Returns:
+            Visual analysis score between 0 and 1
+        """
+        return 0.5  # Placeholder implementation
+    
+    def _analyze_content(self, segment: Segment, transcription: List[Dict[str, Any]]) -> float:
+        """
+        Analyze content features for the segment.
+        
+        Args:
+            segment: The segment to analyze
+            transcription: List of transcription segments
+            
+        Returns:
+            Content analysis score between 0 and 1
+        """
+        return 0.5  # Placeholder implementation
