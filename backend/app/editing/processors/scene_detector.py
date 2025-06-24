@@ -1,12 +1,11 @@
-import subprocess
+"""Scene change detection using FFmpeg's scene filter."""
 import logging
 from pathlib import Path
-from typing import List, Tuple, Dict, Any, Optional
-import tempfile
-import shutil
+from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 
 from ..pipeline.core import VideoProcessor, Context, PipelineError
+from ..utils.ffmpeg_utils import run_ffmpeg
 
 logger = logging.getLogger(__name__)
 
@@ -14,27 +13,25 @@ logger = logging.getLogger(__name__)
 class SceneChange:
     """Represents a scene change in the video."""
     time: float  # Time in seconds where the scene changes
-    score: float  # Confidence score of the scene change
+    score: float = 1.0  # Confidence score (1.0 for FFmpeg's scene detection)
 
 class SceneDetector(VideoProcessor):
-    """
-    Detects scene changes in a video and records them in the context.
-    
-    This processor analyzes the video to detect cuts and scene transitions,
-    recording the timestamps where these changes occur. The detected scene
-    changes are stored in the context for use by downstream processors.
-    """
-    
-    def __init__(self, threshold: float = 30.0, min_scene_len: float = 1.5):
+    """Detects scene changes using FFmpeg's scene filter."""
+
+    def __init__(self, threshold: float = 0.3, min_scene_len: float = 1.5):
         """
         Initialize the scene detector.
         
         Args:
-            threshold: Threshold for scene change detection (lower = more sensitive)
+            threshold: Threshold for scene change detection (0-1, lower = more sensitive)
             min_scene_len: Minimum length of a scene in seconds
         """
         self.threshold = threshold
         self.min_scene_len = min_scene_len
+
+    @property
+    def name(self) -> str:
+        return "scene_detector"
     
     def process(self, context: Context) -> Context:
         """
@@ -44,7 +41,7 @@ class SceneDetector(VideoProcessor):
             context: The processing context containing video path and other state
             
         Returns:
-            Updated context with scene change information
+            Updated context with scene changes
             
         Raises:
             PipelineError: If scene detection fails
@@ -52,15 +49,62 @@ class SceneDetector(VideoProcessor):
         video_path = Path(context.video_path)
         logger.info(f"Detecting scene changes in {video_path}")
         
+        # Run FFmpeg to detect scene changes
+        raw_output = run_ffmpeg([
+            "ffmpeg", "-i", str(video_path),
+            "-filter_complex",
+            f"select='gt(scene,{self.threshold})',metadata=print",
+            "-f", "null", "-"
+        ])
+        
+        # Parse timestamps from FFmpeg output
+        times = [0.0]
+        for line in raw_output.splitlines():
+            if "pts_time:" in line:
+                try:
+                    times.append(float(line.split("pts_time:")[-1]))
+                except ValueError:
+                    continue
+        
+        # Add end time if duration is available
+        duration = getattr(context, 'duration', None)
+        if duration is None:
+            duration = self._probe_duration(video_path)
+        times.append(duration)
+        
+        # Build and filter scenes
+        scenes = []
+        for a, b in zip(times, times[1:]):
+            if b - a >= self.min_scene_len:
+                scenes.append(SceneChange(time=a, score=1.0))
+            elif scenes:
+                # Merge short scenes into the previous one
+                scenes[-1] = SceneChange(time=scenes[-1].time, score=scenes[-1].score)
+        
+        # Add final scene change
+        if scenes and scenes[-1].time < duration:
+            scenes.append(SceneChange(time=duration, score=1.0))
+        
+        # Update context
+        context.scene_changes = scenes
+        context.scenes = [(s.time, e.time) for s, e in zip(scenes, scenes[1:])]
+        
+        logger.info(f"Detected {len(scenes)} scene changes")
+        return context
+    
+    def _probe_duration(self, video_path: Path) -> float:
+        """Get video duration using FFprobe."""
         try:
-            # Get video duration
-            duration = self._get_video_duration(video_path)
-            if duration <= 0:
-                raise PipelineError(f"Invalid video duration: {duration}")
-            
-            # Detect scene changes
-            scene_changes = self._detect_scene_changes(video_path)
-            
+            raw = run_ffmpeg([
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                str(video_path)
+            ], capture_stderr=False)
+            return float(raw.strip())
+        except Exception as e:
+            logger.error(f"Failed to get video duration: {e}")
+            raise PipelineError(f"Could not determine video duration: {e}")
             # Filter out very short scenes
             filtered_changes = self._filter_short_scenes(scene_changes, duration)
             

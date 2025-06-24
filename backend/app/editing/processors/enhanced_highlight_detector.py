@@ -171,8 +171,17 @@ class EnhancedHighlightDetector(VideoProcessor):
     
     def _score_segment(self, segment: Segment, context: Context, 
                       segment_idx: int = 0, total_segments: int = 1) -> HighlightScore:
+        # Initialize with default weights if not set
+        if not hasattr(self, 'audio_weight'):
+            self.audio_weight = 0.4
+            self.visual_weight = 0.3
+            self.content_weight = 0.3
+            
+        # Calculate position-based scoring
+        position_ratio = segment_idx / max(1, total_segments - 1)
+        position_score = 1.0 - abs(0.5 - position_ratio) * 1.5  # Peak at middle
         """
-        Score a segment based on various features including scene changes and silence.
+        Score a segment based on various features including scene changes, silence, and audio features.
         
         Args:
             segment: The segment to score
@@ -230,29 +239,75 @@ class EnhancedHighlightDetector(VideoProcessor):
             if silence_ratio > 0.1:  # Only apply penalty for significant silence
                 score.silence_penalty = silence_ratio * self.silence_penalty
         
-        # Audio features
-        if hasattr(segment, 'audio_energy'):
-            score.audio = self._normalize(segment.audio_energy) * self.audio_weight
-            # Reduce score for silent segments
-            if getattr(segment, 'is_silent', False):
-                score.audio *= 0.5
+        # Audio features scoring
+        audio_score = 0.0
+        audio_features = {}
         
-        # Visual features
-        if hasattr(segment, 'visual_activity'):
-            visual_score = self._normalize(segment.visual_activity)
-            # Boost score for segments at scene boundaries
-            if getattr(segment, 'scene_boundary', False):
-                visual_score = min(1.0, visual_score * 1.2)  # 20% boost
-            score.visual = visual_score * self.visual_weight
+        # Energy-based scoring
+        if hasattr(segment, 'energy_ratio'):
+            # Higher energy is generally better, but not too high (avoid distortion)
+            energy_score = min(1.0, segment.energy_ratio * 1.2)  # Cap at 1.2x average energy
+            audio_features['energy'] = energy_score
+            audio_score += energy_score * 0.4  # 40% weight to energy
         
-        # Content features
+        # Spectral centroid (brightness of sound)
+        if hasattr(segment, 'spectral_centroid_mean'):
+            # Higher spectral centroid indicates brighter sounds (speech, music)
+            # Normalize to 0-1 range (assuming typical speech range 100-4000 Hz)
+            centroid_score = min(1.0, max(0.0, (segment.spectral_centroid_mean - 100) / 3900))
+            audio_features['spectral_centroid'] = centroid_score
+            audio_score += centroid_score * 0.3  # 30% weight to spectral centroid
+        
+        # Zero crossing rate (noise vs tonal sounds)
+        if hasattr(segment, 'zcr_mean'):
+            # Moderate ZCR is good (too high = noise, too low = silence)
+            zcr_score = 1.0 - abs(0.1 - min(0.2, segment.zcr_mean)) * 5  # Peak around 0.1
+            audio_features['zcr'] = zcr_score
+            audio_score += zcr_score * 0.2  # 20% weight to ZCR
+        
+        # Spectral bandwidth (complexity of sound)
+        if hasattr(segment, 'spectral_bandwidth_mean'):
+            # Moderate bandwidth is good (too high = noise, too low = simple tones)
+            bandwidth_score = min(1.0, segment.spectral_bandwidth_mean / 2000)  # Normalize
+            audio_features['bandwidth'] = bandwidth_score
+            audio_score += bandwidth_score * 0.1  # 10% weight to bandwidth
+        
+        # Normalize audio score to 0-1 range
+        audio_score = min(1.0, max(0.0, audio_score))
+        
+        # Apply silence penalty
+        score.audio = audio_score * self.audio_weight
+        
+        # Visual features analysis
+        visual_score = 0.3  # Default score if no visual features
+        if hasattr(segment, 'visual_features'):
+            visual_score = self._analyze_visual(segment, segment.visual_features)
+        score.visual = visual_score * self.visual_weight
+        
+        # Content analysis
+        content_score = 0.3  # Default score if no content features
+        if hasattr(context, 'transcription'):
+            content_score = self._analyze_content(segment, context.transcription)
         if hasattr(segment, 'text') and segment.text:
             # Simple heuristic: longer text is better, but penalize silent segments
             content_score = self._normalize(len(segment.text))
             if getattr(segment, 'is_silent', False):
                 content_score *= 0.7  # 30% penalty for silent segments
-            score.content = content_score * self.content_weight
-            score.silence_penalty = segment.silence_ratio * self.silence_penalty
+        score.content = content_score * self.content_weight
+        
+        # Store feature scores in segment annotations for debugging
+        segment.annotations.update({
+            'audio_score': score.audio,
+            'visual_score': score.visual,
+            'content_score': score.content,
+            'scene_change_bonus': score.scene_change,
+            'silence_penalty': score.silence_penalty,
+            'audio_features': audio_features,
+            'position_ratio': position_ratio,
+            'position_score': position_score,
+            'segment_idx': segment_idx,
+            'total_segments': total_segments
+        })
         
         return score
     
@@ -290,39 +345,132 @@ class EnhancedHighlightDetector(VideoProcessor):
     
     def _analyze_audio(self, segment: Segment, audio_features: Dict[str, Any]) -> float:
         """
-        Analyze audio features for the segment.
+        Analyze audio features for the segment to determine engagement potential.
         
         Args:
             segment: The segment to analyze
-            audio_features: Dictionary of audio features
+            audio_features: Dictionary of audio features with keys like 'energy', 'pitch', 'speech_probability'
             
         Returns:
-            Audio analysis score between 0 and 1
+            Audio analysis score between 0 and 1, where 1 is most engaging
         """
-        return 0.5  # Placeholder implementation
+        if not audio_features:
+            return 0.3  # Default score if no features available
+            
+        score = 0.0
+        
+        # Energy (loudness) - higher is better, but not too high
+        energy = audio_features.get('energy', 0.5)
+        energy_score = min(1.0, energy * 1.5)  # Cap at 1.5x average energy
+        
+        # Pitch variation - more variation is more engaging
+        pitch_var = audio_features.get('pitch_variance', 0.0)
+        pitch_score = min(1.0, pitch_var * 2.0)
+        
+        # Speech probability - prefer segments with clear speech
+        speech_prob = audio_features.get('speech_probability', 0.0)
+        
+        # Combine features with weights
+        score = (
+            0.5 * energy_score +
+            0.3 * pitch_score +
+            0.2 * speech_prob
+        )
+        
+        # Apply silence penalty if applicable
+        if getattr(segment, 'is_silent', False):
+            score *= 0.4  # 60% penalty for silent segments
+            
+        return min(1.0, max(0.0, score))  # Ensure 0-1 range
     
     def _analyze_visual(self, segment: Segment, visual_features: Dict[str, Any]) -> float:
         """
-        Analyze visual features for the segment.
+        Analyze visual features to determine engagement potential.
         
         Args:
             segment: The segment to analyze
-            visual_features: Dictionary of visual features
+            visual_features: Dictionary with keys like 'motion', 'contrast', 'face_detected'
             
         Returns:
-            Visual analysis score between 0 and 1
+            Visual analysis score between 0 and 1, where 1 is most engaging
         """
-        return 0.5  # Placeholder implementation
+        if not visual_features:
+            return 0.3  # Default score if no features available
+            
+        score = 0.0
+        
+        # Motion - moderate motion is most engaging
+        motion = visual_features.get('motion', 0.5)
+        motion_score = 1.0 - abs(0.6 - motion) * 2  # Peak at 0.6 motion
+        
+        # Face detection - prefer segments with faces
+        face_score = 1.0 if visual_features.get('face_detected', False) else 0.3
+        
+        # Contrast - higher contrast is generally more engaging
+        contrast = visual_features.get('contrast', 0.5)
+        contrast_score = min(1.0, contrast * 1.5)
+        
+        # Combine features with weights
+        score = (
+            0.4 * motion_score +
+            0.4 * face_score +
+            0.2 * contrast_score
+        )
+        
+        # Boost score for scene boundaries
+        if getattr(segment, 'scene_boundary', False):
+            score = min(1.0, score * 1.3)  # 30% boost for scene boundaries
+            
+        return min(1.0, max(0.0, score))  # Ensure 0-1 range
     
     def _analyze_content(self, segment: Segment, transcription: List[Dict[str, Any]]) -> float:
         """
-        Analyze content features for the segment.
+        Analyze content features to determine engagement potential.
         
         Args:
             segment: The segment to analyze
-            transcription: List of transcription segments
+            transcription: List of transcription segments with 'text', 'start', 'end', 'confidence'
             
         Returns:
-            Content analysis score between 0 and 1
+            Content analysis score between 0 and 1, where 1 is most engaging
         """
-        return 0.5  # Placeholder implementation
+        if not transcription:
+            return 0.3  # Default score if no transcription
+            
+        # Find transcription segments that overlap with this video segment
+        relevant_segments = [
+            t for t in transcription 
+            if t['end'] >= segment.start and t['start'] <= segment.end
+        ]
+        
+        if not relevant_segments:
+            return 0.2  # No relevant transcription
+            
+        # Calculate content metrics
+        total_chars = sum(len(t.get('text', '')) for t in relevant_segments)
+        avg_confidence = sum(t.get('confidence', 0.5) for t in relevant_segments) / len(relevant_segments)
+        
+        # Text features
+        text = ' '.join(t.get('text', '') for t in relevant_segments)
+        text_length = len(text)
+        
+        # Simple heuristic: prefer segments with moderate text length
+        # (not too short, not too long)
+        if text_length < 20:  # Very short text
+            length_score = 0.3
+        elif text_length > 200:  # Very long text
+            length_score = 0.7
+        else:  # Ideal length
+            length_score = 1.0
+            
+        # Confidence score
+        confidence_score = avg_confidence
+        
+        # Combine scores
+        score = 0.6 * length_score + 0.4 * confidence_score
+        
+        # Apply penalties
+        if getattr(segment, 'is_silent', False):
+            score *= 0.7  # 30% penalty for silent segments
+            
+        return min(1.0, max(0.0, score))  # Ensure 0-1 range

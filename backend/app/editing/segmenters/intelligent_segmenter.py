@@ -5,9 +5,10 @@ This module provides advanced segmentation that understands video content struct
 and creates natural segments based on topics, speakers, and content flow.
 """
 import logging
+import re
 import numpy as np
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any, Union
+from typing import Dict, List, Optional, Tuple, Any, Union, Callable
 from dataclasses import dataclass, field
 
 # Optional imports with graceful fallback
@@ -33,9 +34,16 @@ except ImportError:
         "Sentiment analysis features will be disabled."
     )
 
-from ..pipeline.core import VideoProcessor, Context, PipelineError, Segment
+from ..pipeline.core import VideoProcessor, Context, PipelineError, Segment, Progress, ProcessingStatus, CancellationToken
 
 logger = logging.getLogger(__name__)
+
+# Regex for detecting sentence boundaries
+SENTENCE_END = re.compile(r'[.!?]\s*$')
+
+# Type aliases for better code readability
+SegmentDict = Dict[str, Any]
+Transcription = List[Dict[str, Any]]
 
 @dataclass
 class SegmentFeatures:
@@ -48,10 +56,19 @@ class SegmentFeatures:
     tfidf_vector: Optional[Any] = None
     audio_energy: Optional[float] = None
     visual_activity: Optional[float] = None
+    is_sentence_end: bool = False
+    pause_after: float = 0.0
+    
+    @property
+    def duration(self) -> float:
+        return self.end_time - self.start_time
+    
+    @property
+    def is_valid(self) -> bool:
+        return self.end_time > self.start_time and bool(self.text.strip())
 
 class IntelligentSegmenter(VideoProcessor):
-    """
-    Advanced segmentation system that creates natural content boundaries
+    """Advanced segmentation system that creates natural content boundaries
     based on semantic analysis, speaker changes, and topic shifts.
     
     This segmenter analyzes multiple aspects of video content to create
@@ -70,7 +87,9 @@ class IntelligentSegmenter(VideoProcessor):
         speaker_change_weight: float = 0.4,
         topic_change_weight: float = 0.6,
         use_scene_boundaries: bool = True,
-        respect_silence: bool = True
+        respect_silence: bool = True,
+        pause_threshold: float = 1.0,
+        min_silence_len: float = 0.8
     ):
         """
         Initialize the intelligent segmenter.
@@ -83,6 +102,8 @@ class IntelligentSegmenter(VideoProcessor):
             topic_change_weight: Weight for topic change detection (0-1)
             use_scene_boundaries: Whether to respect scene boundaries from SceneDetector
             respect_silence: Whether to avoid cutting in the middle of speech
+            pause_threshold: Pause duration in seconds to consider as a boundary
+            min_silence_len: Minimum silence length to consider for segmentation
         """
         self.min_segment_duration = min_segment_duration
         self.max_segment_duration = max_segment_duration
@@ -91,6 +112,8 @@ class IntelligentSegmenter(VideoProcessor):
         self.topic_change_weight = topic_change_weight
         self.use_scene_boundaries = use_scene_boundaries
         self.respect_silence = respect_silence
+        self.pause_threshold = pause_threshold
+        self.min_silence_len = min_silence_len
         
         if SKLEARN_AVAILABLE:
             # Initialize TF-IDF vectorizer for semantic analysis
@@ -101,12 +124,23 @@ class IntelligentSegmenter(VideoProcessor):
                 min_df=1
             )
     
-    def process(self, context: Context) -> Context:
+    @property
+    def name(self) -> str:
+        return "intelligent_segmenter"
+    
+    def process(
+        self,
+        context: Context,
+        progress_callback: Optional[Callable[[Progress], None]] = None,
+        cancel_token: Optional[CancellationToken] = None
+    ) -> Context:
         """
         Process the video context to create intelligent segments.
         
         Args:
             context: The processing context containing video path and other state
+            progress_callback: Optional callback for progress updates
+            cancel_token: Optional cancellation token
             
         Returns:
             Updated context with segments
@@ -114,104 +148,216 @@ class IntelligentSegmenter(VideoProcessor):
         Raises:
             PipelineError: If segmentation fails
         """
+        # Initialize cancellation
+        cancel_token = cancel_token or CancellationToken()
+        
         try:
-            logger.info("Starting intelligent segmentation...")
+            # Update progress
+            self._update_progress(progress_callback, 0, 4, ProcessingStatus.RUNNING, "Starting segmentation")
             
             # Get transcription from context
-            if not hasattr(context, 'transcription') or not context.transcription:
-                raise PipelineError("No transcription found in context")
+            transcription = getattr(context, 'transcription', [])
+            if not transcription:
+                logger.warning("No transcription available for segmentation")
+                return context
             
-            # Get duration from context or estimate from transcription
-            video_duration = getattr(context, 'duration', 
-                                  context.transcription[-1]['end'] if context.transcription else 0)
+            # Get video duration from context or calculate from transcription
+            video_duration = getattr(context, 'duration', 0) or \
+                          max(t.get('end', 0) for t in transcription) if transcription else 0
             
-            # Extract features and create initial segments
-            features = self._extract_features(context.transcription, context)
+            # Update progress
+            self._update_progress(progress_callback, 1, 4, ProcessingStatus.RUNNING, "Extracting features")
             
-            # Apply segmentation based on features
-            segments = self._segment_based_on_features(features, context)
+            # Extract features from transcription
+            features = self._extract_features(transcription, context)
             
-            # Convert to Segment objects and add to context
-            for seg_data in segments:
-                segment = Segment(
-                    start=seg_data['start'],
-                    end=seg_data['end'],
-                    text=seg_data.get('text', ''),
-                    speaker=seg_data.get('speaker'),
-                    sentiment=seg_data.get('sentiment')
-                )
-                # Add any additional metadata
-                for k, v in seg_data.items():
-                    if k not in ['start', 'end', 'text', 'speaker', 'sentiment']:
-                        setattr(segment, k, v)
-                
-                context.segments.append(segment)
+            # Update progress
+            self._update_progress(progress_callback, 2, 4, ProcessingStatus.RUNNING, "Applying segmentation")
+            
+            # Apply segmentation
+            segments = self.segment_video(
+                transcription=transcription,
+                video_duration=video_duration,
+                audio_features=getattr(context, 'audio_features', None),
+                visual_features=getattr(context, 'visual_features', None)
+            )
+            
+            # Update progress
+            self._update_progress(progress_callback, 3, 4, ProcessingStatus.RUNNING, "Post-processing segments")
+            
+            # Post-process segments
+            segments = self._post_process_segments(segments, transcription)
+            
+            # Update context with segments
+            context.segments = segments
+            
+            # Update progress
+            self._update_progress(progress_callback, 4, 4, ProcessingStatus.COMPLETED, "Segmentation completed")
             
             logger.info(f"Created {len(segments)} segments")
             return context
             
         except Exception as e:
-            raise PipelineError(f"Segmentation failed: {str(e)}") from e
+            error_msg = f"Segmentation failed: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            self._update_progress(progress_callback, 0, 4, ProcessingStatus.FAILED, error_msg)
+            raise PipelineError(error_msg) from e
+    
+    def _update_progress(
+        self,
+        progress_callback: Optional[Callable[[Progress], None]],
+        current: int,
+        total: int,
+        status: ProcessingStatus = ProcessingStatus.RUNNING,
+        message: str = ""
+    ) -> None:
+        """Helper method to update progress if callback is provided."""
+        if progress_callback:
+            progress = Progress(
+                current=current,
+                total=total,
+                status=status,
+                message=message,
+                metadata={
+                    'processor': self.__class__.__name__,
+                    'min_duration': self.min_segment_duration,
+                    'max_duration': self.max_segment_duration
+                }
+            )
+            progress_callback(progress)
     
     def _extract_features(self, transcription: List[Dict], context: Context) -> List[SegmentFeatures]:
         """Extract features from transcription and context."""
         features = []
         
-        for i, item in enumerate(transcription):
-            feat = SegmentFeatures(
-                start_time=item['start'],
-                end_time=item['end'],
-                text=item.get('text', ''),
-                speaker=item.get('speaker')
+        for i, segment in enumerate(transcription):
+            # Calculate pause after this segment
+            pause_after = 0.0
+            if i < len(transcription) - 1:
+                next_start = transcription[i+1].get('start', 0)
+                pause_after = max(0, next_start - segment.get('end', 0))
+            
+            # Check if this segment ends a sentence
+            text = segment.get('text', '').strip()
+            is_sentence_end = bool(SENTENCE_END.search(text))
+            
+            feature = SegmentFeatures(
+                start_time=segment.get('start', 0),
+                end_time=segment.get('end', 0),
+                text=text,
+                speaker=segment.get('speaker'),
+                is_sentence_end=is_sentence_end,
+                pause_after=pause_after
             )
             
-            # Add sentiment if available
-            if TEXTBLOB_AVAILABLE and 'text' in item:
-                blob = TextBlob(item['text'])
-                feat.sentiment = blob.sentiment.polarity
+            # Enrich with context information
+            self._enrich_with_context(feature, context)
             
-            # Add any other features from context (scene changes, silence, etc.)
-            self._enrich_with_context(feat, context)
-            
-            features.append(feat)
+            features.append(feature)
         
         return features
     
     def _enrich_with_context(self, feature: SegmentFeatures, context: Context) -> None:
         """Enrich segment features with context information."""
-        # Add scene change information
-        if hasattr(context, 'scene_changes'):
-            feature.scene_change = any(
-                abs(feature.start_time - t) < 1.0 for t in context.scene_changes
+        # Add silence information if available
+        if hasattr(context, 'silent_sections'):
+            feature.silence_ratio = self._calculate_silence_ratio(
+                feature.start_time,
+                feature.end_time,
+                context.silent_sections
             )
         
-        # Add silence information
-        if hasattr(context, 'silence_sections'):
-            feature.silence_ratio = self._calculate_silence_ratio(
-                feature.start_time, feature.end_time, context.silence_sections
-            )
+        # Add audio energy if available
+        if hasattr(context, 'audio_features'):
+            # Simple average energy for the segment
+            audio_features = context.audio_features
+            start_idx = int(feature.start_time * audio_features.get('sample_rate', 1))
+            end_idx = int(feature.end_time * audio_features.get('sample_rate', 1))
+            
+            if 'energy' in audio_features and end_idx > start_idx:
+                segment_energy = audio_features['energy'][start_idx:end_idx]
+                if len(segment_energy) > 0:
+                    feature.audio_energy = float(np.mean(segment_energy))
+        
+        # Add visual activity if available
+        if hasattr(context, 'visual_features'):
+            visual_features = context.visual_features
+            frame_rate = visual_features.get('frame_rate', 1)
+            start_frame = int(feature.start_time * frame_rate)
+            end_frame = int(feature.end_time * frame_rate)
+            
+            if 'motion' in visual_features and end_frame > start_frame:
+                segment_motion = visual_features['motion'][start_frame:end_frame]
+                if len(segment_motion) > 0:
+                    feature.visual_activity = float(np.mean(segment_motion))
+        
+        # Add sentiment analysis if TextBlob is available
+        if TEXTBLOB_AVAILABLE and feature.text:
+            try:
+                blob = TextBlob(feature.text)
+                feature.sentiment = blob.sentiment.polarity
+            except Exception as e:
+                logger.warning(f"Sentiment analysis failed: {str(e)}")
+        
+        # Add TF-IDF vector if scikit-learn is available
+        if SKLEARN_AVAILABLE and feature.text:
+            try:
+                if not hasattr(self, '_fitted_vectorizer'):
+                    # Fit the vectorizer on the first call
+                    all_text = [f.text for f in getattr(context, 'segments', []) if f.text]
+                    if all_text:
+                        self.vectorizer.fit(all_text)
+                        self._fitted_vectorizer = True
+                
+                # Transform the current text
+                if hasattr(self, '_fitted_vectorizer'):
+                    feature.tfidf_vector = self.vectorizer.transform([feature.text])
+            except Exception as e:
+                logger.warning(f"TF-IDF vectorization failed: {str(e)}")
     
-    def _calculate_silence_ratio(self, start: float, end: float, 
-                               silence_sections: List[Dict]) -> float:
-        """Calculate the ratio of silence in the given time range."""
+    def _calculate_silence_ratio(self, start: float, end: float, silence_sections: List[Dict]) -> float:
+        """
+        Calculate the ratio of silence in the given time range.
+        
+        Args:
+            start: Start time in seconds
+            end: End time in seconds
+            silence_sections: List of silence sections with 'start' and 'end' keys
+            
+        Returns:
+            float: Ratio of silence duration to total duration (0.0 to 1.0)
+        """
         if not silence_sections:
             return 0.0
             
-        total_silence = 0.0
+        total_duration = end - start
+        if total_duration <= 0:
+            return 0.0
+            
+        silence_duration = 0.0
         for silence in silence_sections:
-            s_start = max(start, silence['start'])
-            s_end = min(end, silence['end'])
-            if s_start < s_end:
-                total_silence += (s_end - s_start)
+            silence_start = silence.get('start', 0)
+            silence_end = silence.get('end', 0)
+            
+            # Calculate overlap with current time range
+            overlap_start = max(start, silence_start)
+            overlap_end = min(end, silence_end)
+            
+            if overlap_end > overlap_start:
+                silence_duration += (overlap_end - overlap_start)
         
-        return total_silence / (end - start) if end > start else 0.0
+        return silence_duration / total_duration if total_duration > 0 else 0.0
     
-    def _segment_based_on_features(self, features: List[SegmentFeatures], 
-                                 context: Context) -> List[Dict]:
+    def _segment_based_on_features(self, features: List[SegmentFeatures], context: Context) -> List[Dict]:
         """
-        Apply segmentation based on extracted features.
-        This is a simplified version - the actual implementation would use
-        the intelligent segmentation logic from the original class.
+        Create segments based on the extracted features.
+        
+        Args:
+            features: List of segment features
+            context: Processing context
+            
+        Returns:
+            List of segment dictionaries
         """
         if not features:
             return []

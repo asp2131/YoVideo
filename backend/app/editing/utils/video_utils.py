@@ -2,10 +2,11 @@
 import subprocess
 import logging
 import tempfile
-from pathlib import Path
-from typing import Optional, Tuple, List, Dict, Any
-import json
+import shutil
 import os
+import json
+from pathlib import Path
+from typing import Optional, Tuple, List, Dict, Any, Union
 
 logger = logging.getLogger(__name__)
 
@@ -293,11 +294,17 @@ def concat_videos(
         return False
 
 def extract_segments(
-    input_path: Path,
+    input_path: Union[str, Path],
     segments: List[Dict[str, float]],
-    output_path: Optional[Path] = None,
-    temp_dir: Optional[Path] = None
+    output_path: Optional[Union[str, Path]] = None,
+    temp_dir: Optional[Union[str, Path]] = None
 ) -> Optional[Path]:
+    # Convert string paths to Path objects
+    input_path = Path(input_path) if isinstance(input_path, str) else input_path
+    if output_path is not None:
+        output_path = Path(output_path) if isinstance(output_path, str) else output_path
+    if temp_dir is not None:
+        temp_dir = Path(temp_dir) if isinstance(temp_dir, str) else temp_dir
     """
     Extract segments from a video file while maintaining audio-video sync.
     
@@ -313,92 +320,173 @@ def extract_segments(
     if not segments:
         logger.warning("No segments provided for extraction")
         return None
-    
-    if temp_dir is None:
-        temp_dir = Path(tempfile.mkdtemp(prefix='videothingy_'))
-    
-    # If no output path specified, use a default
-    if output_path is None:
-        output_path = input_path.with_stem(f"{input_path.stem}_highlight")
-    
-    # If only one segment, extract it directly
-    if len(segments) == 1:
-        segment = segments[0]
-        cmd = [
-            'ffmpeg',
-            '-ss', str(segment['start']),
-            '-i', str(input_path),
-            '-t', str(segment['end'] - segment['start']),
-            '-c:v', 'libx264',  # Re-encode video for better compatibility
-            '-c:a', 'aac',      # Re-encode audio for better compatibility
-            '-strict', 'experimental',
-            '-b:a', '192k',     # Higher quality audio
-            '-ar', '48000',     # Standard audio sample rate
-            '-preset', 'fast',  # Faster encoding with good quality
-            '-movflags', '+faststart',
-            '-y',
-            str(output_path)
-        ]
         
-        logger.info(f"Extracting single segment: {segment['start']:.2f}s - {segment['end']:.2f}s")
-        try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
-            return output_path
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Error extracting segment: {e.stderr}")
-            return None
+    if not output_path:
+        output_path = input_path.parent / f"{input_path.stem}_highlights{input_path.suffix}"
     
-    # For multiple segments, use concat demuxer with proper timestamps
+    if not temp_dir:
+        temp_dir = Path(tempfile.mkdtemp(prefix="video_segments_"))
+    else:
+        temp_dir = Path(temp_dir)
+        temp_dir.mkdir(parents=True, exist_ok=True)
+    
     try:
-        # Create a file list for concat demuxer
-        concat_file = temp_dir / 'concat_list.txt'
-        with open(concat_file, 'w') as f:
-            for i, segment in enumerate(segments):
-                # Create a temporary segment file
-                segment_file = temp_dir / f'segment_{i:04d}.mp4'
+        # Create a temporary directory for segment files
+        segments_dir = temp_dir / "segments"
+        segments_dir.mkdir(exist_ok=True)
+        
+        # Create a list to store the segment file paths
+        segment_files = []
+        
+        # Extract each segment
+        for i, segment in enumerate(segments):
+            start = float(segment.get('start', 0))
+            end = float(segment.get('end', 0))
+            duration = end - start
+            
+            if duration <= 0:
+                logger.warning(f"Skipping invalid segment {i}: start={start}, end={end}")
+                continue
                 
-                # Extract the segment with proper timestamps
-                cmd = [
-                    'ffmpeg',
-                    '-ss', str(segment['start']),
-                    '-i', str(input_path),
-                    '-t', str(segment['end'] - segment['start']),
-                    '-c:v', 'libx264',
-                    '-c:a', 'aac',
-                    '-strict', 'experimental',
-                    '-b:a', '192k',
-                    '-ar', '48000',
-                    '-preset', 'fast',
-                    '-movflags', '+faststart',
-                    '-y',
-                    str(segment_file)
-                ]
-                
-                logger.info(f"Extracting segment {i+1}: {segment['start']:.2f}s - {segment['end']:.2f}s")
-                subprocess.run(cmd, check=True, capture_output=True, text=True)
-                
-                # Add to concat list
-                f.write(f"file '{segment_file.absolute()}'\n")
+            segment_file = segments_dir / f"segment_{i:04d}{input_path.suffix}"
+            
+            # Use ffmpeg to extract the segment
+            cmd = [
+                'ffmpeg',
+                '-y',  # Overwrite output files
+                '-ss', str(start),  # Start time
+                '-i', str(input_path),  # Input file
+                '-t', str(duration),  # Duration
+                '-c', 'copy',  # Stream copy (no re-encoding)
+                '-avoid_negative_ts', 'make_zero',
+                str(segment_file)
+            ]
+            
+            try:
+                subprocess.run(cmd, check=True, capture_output=True)
+                segment_files.append(segment_file)
+                logger.info(f"Extracted segment {i+1}/{len(segments)}: {start:.2f}s - {end:.2f}s")
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Error extracting segment {i}: {e.stderr}")
+                continue
         
-        # Concatenate segments using concat demuxer
-        concat_cmd = [
-            'ffmpeg',
-            '-f', 'concat',
-            '-safe', '0',
-            '-i', str(concat_file),
-            '-c', 'copy',  # Stream copy is safe because we re-encoded all segments the same way
-            '-y',
-            str(output_path)
-        ]
+        if not segment_files:
+            logger.error("No segments were successfully extracted")
+            return None
         
-        logger.info(f"Concatenating {len(segments)} segments to {output_path}")
-        subprocess.run(concat_cmd, check=True, capture_output=True, text=True)
+        logger.info(f"Concatenating {len(segment_files)} segments to {output_path}")
+        try:
+            # Create concat list file
+            concat_list = temp_dir / "concat_list.txt"
+            with open(concat_list, 'w') as f:
+                for segment_file in segment_files:
+                    f.write(f"file '{segment_file.absolute()}'\n")
+
+            # Build FFmpeg concat command
+            concat_cmd = [
+                'ffmpeg',
+                '-f', 'concat',
+                '-safe', '0',
+                '-i', str(concat_list),
+                '-c', 'copy',
+                '-y',  # Overwrite output file if it exists
+                str(output_path)
+            ]
+
+            # Run FFmpeg concat command
+            subprocess.run(concat_cmd, check=True, capture_output=True, text=True)
+            logger.info(f"Successfully created concatenated video at {output_path}")
+            return output_path
         
-        return output_path
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Error extracting segments: {e.stderr}")
+            return None
         
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Error extracting segments: {e.stderr}")
-        return None
     except Exception as e:
         logger.error(f"Unexpected error in extract_segments: {str(e)}")
         return None
+
+
+def create_highlight_video(
+    input_path: Path,
+    highlights: List[Dict[str, Any]],
+    output_path: Optional[Path] = None,
+    temp_dir: Optional[Path] = None,
+    keep_temp: bool = False
+) -> Optional[Path]:
+    """
+    Create a highlight video from a list of highlight segments.
+    
+    Args:
+        input_path: Path to the input video file
+        highlights: List of highlight segments with 'start' and 'end' times
+        output_path: Path where the output video will be saved
+        temp_dir: Directory for temporary files
+        keep_temp: Whether to keep temporary files for debugging
+        
+    Returns:
+        Path to the output video file if successful, None otherwise
+    """
+    if not highlights:
+        logger.warning("No highlights provided for video creation")
+        return None
+    
+    # Set default output path if not provided
+    if not output_path:
+        output_path = input_path.parent / f"{input_path.stem}_highlights{input_path.suffix}"
+    
+    # Create temporary directory if not provided
+    if not temp_dir:
+        temp_dir = Path(tempfile.mkdtemp(prefix="highlight_video_"))
+    else:
+        temp_dir = Path(temp_dir)
+        temp_dir.mkdir(parents=True, exist_ok=True)
+    
+    try:
+        # Convert highlights to the format expected by extract_segments
+        segments = []
+        for i, highlight in enumerate(highlights):
+            # Handle both dictionary and object access
+            start = highlight.get('start') if hasattr(highlight, 'get') else getattr(highlight, 'start', 0)
+            end = highlight.get('end') if hasattr(highlight, 'get') else getattr(highlight, 'end', 0)
+            
+            if start is None or end is None:
+                logger.warning(f"Skipping highlight {i}: missing start or end time")
+                continue
+                
+            segments.append({
+                'start': float(start),
+                'end': float(end),
+                'text': highlight.get('text', '') if hasattr(highlight, 'get') else getattr(highlight, 'text', '')
+            })
+        
+        if not segments:
+            logger.error("No valid segments found in highlights")
+            return None
+        
+        # Extract and concatenate segments
+        result = extract_segments(
+            input_path=input_path,
+            segments=segments,
+            output_path=output_path,
+            temp_dir=temp_dir / "segments"
+        )
+        
+        if result:
+            logger.info(f"Successfully created highlight video at {output_path}")
+        else:
+            logger.error("Failed to create highlight video")
+            
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in create_highlight_video: {str(e)}", exc_info=True)
+        return None
+        
+    finally:
+        # Clean up temporary files if not keeping them
+        if not keep_temp and temp_dir and temp_dir.exists():
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception as e:
+                logger.warning(f"Error cleaning up temporary directory: {e}")

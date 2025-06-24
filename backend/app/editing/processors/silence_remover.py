@@ -1,9 +1,20 @@
-import subprocess
+"""Remove long silences from video while preserving natural speech pauses."""
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional, Callable
 import logging
 from dataclasses import dataclass
-from ..pipeline.core import VideoProcessor, Context, PipelineError, Progress, CancellationToken, ProcessingStatus
+import tempfile
+import shutil
+
+from ..pipeline.core import (
+    VideoProcessor, 
+    Context, 
+    PipelineError, 
+    Progress, 
+    CancellationToken, 
+    ProcessingStatus
+)
+from ..utils.ffmpeg_utils import run_ffmpeg
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +29,9 @@ class SilenceSection:
         return self.end - self.start
 
 class SilenceRemover(VideoProcessor):
-    """Detects silent sections in the audio track."""
+    """Strip only long (> threshold) silences, preserving natural speech pauses."""
     
-    def __init__(self, silence_threshold: float = -30.0, silence_duration: float = 0.5):
+    def __init__(self, silence_threshold: float = -30.0, silence_duration: float = 0.8):
         """Initialize the silence remover.
         
         Args:
@@ -29,6 +40,10 @@ class SilenceRemover(VideoProcessor):
         """
         self.silence_threshold = silence_threshold
         self.silence_duration = silence_duration
+
+    @property
+    def name(self) -> str:
+        return "silence_remover"
     
     def process(
         self, 
@@ -36,7 +51,7 @@ class SilenceRemover(VideoProcessor):
         progress_callback: Optional[Callable[[Progress], None]] = None,
         cancel_token: Optional[CancellationToken] = None
     ) -> Context:
-        """Detect silent sections in the audio track.
+        """Remove long silences from the video.
         
         Args:
             context: The processing context
@@ -44,10 +59,10 @@ class SilenceRemover(VideoProcessor):
             cancel_token: Optional cancellation token
             
         Returns:
-            Updated context with silence sections marked
+            Updated context with silent sections marked and video processed
             
         Raises:
-            PipelineError: If silence detection fails
+            PipelineError: If silence removal fails
         """
         # Initialize cancellation
         cancel_token = cancel_token or CancellationToken()
@@ -96,151 +111,21 @@ class SilenceRemover(VideoProcessor):
             return context
             
         except Exception as e:
-            error_msg = f"Error detecting silence: {str(e)}"
-            self._update_progress(progress_callback, 0, 3, ProcessingStatus.FAILED, error_msg)
-            if isinstance(e, PipelineError):
-                raise
+            # Clean up the temporary file if it exists
+            if output_path.exists():
+                output_path.unlink()
+            error_msg = f"Silence removal failed: {str(e)}"
+            logger.error(error_msg)
+            
+            # Update progress with error
+            if progress_callback:
+                progress_callback(Progress(
+                    status=ProcessingStatus.FAILED,
+                    message=error_msg,
+                    progress=0.0
+                ))
+            
             raise PipelineError(error_msg) from e
-    
-    def _detect_silence(self, video_path: str, cancel_token: CancellationToken) -> List[Dict[str, float]]:
-        """Detect silent sections in the video using ffmpeg."""
-        try:
-            # Use ffmpeg's silencedetect filter to find silent sections
-            cmd = [
-                'ffmpeg',
-                '-i', video_path,
-                '-af', f'silencedetect=noise={self.silence_threshold}dB:d={self.silence_duration}',
-                '-f', 'null',
-                '-',
-                '-y',
-                '-loglevel', 'info+repeat+level+verbose+cmd+debug'
-            ]
-            
-            # Run the command and capture stderr (where silencedetect outputs its data)
-            process = subprocess.Popen(
-                cmd,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1,  # Line buffered
-                universal_newlines=True
-            )
-            
-            output = []
-            
-            # Read output line by line to allow for cancellation
-            while True:
-                if cancel_token.is_cancelled:
-                    process.terminate()
-                    raise PipelineError("Silence detection was cancelled")
-                
-                line = process.stderr.readline()
-                if not line and process.poll() is not None:
-                    break
-                    
-                if line:
-                    output.append(line)
-            
-            # Check return code
-            if process.returncode != 0:
-                logger.warning(f"FFmpeg returned non-zero exit code {process.returncode}")
-                return []
-            
-            # Parse the output to find silence sections
-            return self._parse_silence_output(''.join(output))
-            
-        except subprocess.CalledProcessError as e:
-            logger.warning(f"FFmpeg error: {str(e)}")
-            return []
-    
-    def _parse_silence_output(self, output: str) -> List[Dict[str, float]]:
-        """Parse ffmpeg's silencedetect output into a list of silence sections."""
-        import re
-        
-        # This regex matches the silence_start and silence_end lines from ffmpeg's output
-        silence_start_re = r'silence_start: (\d+(?:\.\d+)?)'
-        silence_end_re = r'silence_end: (\d+(?:\.\d+)?)'
-        
-        starts = [float(match) for match in re.findall(silence_start_re, output)]
-        ends = [float(match) for match in re.findall(silence_end_re, output)]
-        
-        # Pair up starts and ends
-        silence_sections = [
-            {'start': start, 'end': end, 'duration': end - start}
-            for start, end in zip(starts, ends)
-        ]
-        
-        return silence_sections
-    
-    def _get_video_duration(self, video_path: str) -> Optional[float]:
-        """Get video duration using ffprobe."""
-        try:
-            cmd = [
-                'ffprobe',
-                '-v', 'error',
-                '-show_entries', 'format=duration',
-                '-of', 'default=noprint_wrappers=1:nokey=1',
-                video_path
-            ]
-            
-            result = subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=True
-            )
-            
-            return float(result.stdout.strip())
-            
-        except (subprocess.CalledProcessError, ValueError) as e:
-            logger.warning(f"Could not determine video duration: {str(e)}")
-            return None
-    
-    def _update_progress(
-        self,
-        progress_callback: Optional[Callable[[Progress], None]],
-        current: int,
-        total: int,
-        status: ProcessingStatus = ProcessingStatus.RUNNING,
-        message: str = ""
-    ) -> None:
-        """Helper method to update progress if callback is provided."""
-        if progress_callback:
-            progress = Progress(
-                current=current,
-                total=total,
-                status=status,
-                message=message,
-                metadata={
-                    'processor': self.__class__.__name__,
-                    'silence_threshold': self.silence_threshold,
-                    'silence_duration': self.silence_duration
-                }
-            )
-            progress_callback(progress)
-    
-    def _create_filter_complex(self, silent_sections: list) -> str:
-        """Create a filter complex to remove silent sections."""
-        if not silent_sections:
-            return ""
-            
-        # Sort sections by start time
-        silent_sections.sort()
-        
-        # Build the filter complex
-        filter_parts = []
-        last_end = 0.0
-        
-        for i, (start, end) in enumerate(silent_sections):
-            if start > last_end:
-                # Add the segment before this silence
-                filter_parts.append(f"between(t,{last_end},{start})")
-            last_end = end
-        
-        # Add the final segment after the last silence
-        filter_parts.append(f"gt(t,{last_end})")
-        
-        return "select='" + "+".join(filter_parts) + "',setpts=N/FRAME_RATE/TB"
     
     def _apply_filter(self, input_path: Path, output_path: Path, filter_complex: str) -> None:
         """Apply the filter complex to the input video."""

@@ -1,0 +1,84 @@
+{
+  "status": "success",
+  "message": "Detected 7 highlights",
+  "duration": 417.736344,
+  "highlights": [
+    {
+      "start": 0.0,
+      "end": 8.525231510204081,
+      "duration": 8.525231510204081,
+      "score": 0.12,
+      "text": "",
+      "speaker": null,
+      "scene_change": false,
+      "sentiment": 0.0
+    },
+    {
+      "start": 8.525231510204081,
+      "end": 17.050463020408163,
+      "duration": 8.525231510204081,
+      "score": 0.12,
+      "text": "",
+      "speaker": null,
+      "scene_change": false,
+      "sentiment": 0.0
+    },
+    {
+      "start": 17.050463020408163,
+      "end": 25.575694530612246,
+      "duration": 8.525231510204083,
+      "score": 0.12,
+      "text": "",
+      "speaker": null,
+      "scene_change": false,
+      "sentiment": 0.0
+    },
+    {
+      "start": 25.575694530612246,
+      "end": 34.100926040816326,
+      "duration": 8.52523151020408,
+      "score": 0.12,
+      "text": "",
+      "speaker": null,
+      "scene_change": false,
+      "sentiment": 0.0
+    },
+    {
+      "start": 34.100926040816326,
+      "end": 42.626157551020405,
+      "duration": 8.52523151020408,
+      "score": 0.12,
+      "text": "",
+      "speaker": null,
+      "scene_change": false,
+      "sentiment": 0.0
+    },
+    {
+      "start": 42.626157551020405,
+      "end": 51.15138906122449,
+      "duration": 8.525231510204087,
+      "score": 0.12,
+      "text": "",
+      "speaker": null,
+      "scene_change": false,
+      "sentiment": 0.0
+    },
+    {
+      "start": 51.15138906122449,
+      "end": 59.67662057142857,
+      "duration": 8.52523151020408,
+      "score": 0.12,
+      "text": "",
+      "speaker": null,
+      "scene_change": false,
+      "sentiment": 0.0
+    }
+  ],
+  "segment_count": 49,
+  "highlight_count": 7,
+  "audio_features": {
+    "sample_rate": 16000,
+    "hop_length": 512,
+    "feature_count": 18
+  }
+}
