@@ -1,476 +1,758 @@
 """
-Enhanced Highlight Detector
+Enhanced Highlight Detector with OpusClip-level Quality
 
-A multi-modal processor that identifies highlight-worthy segments in videos
-using a combination of audio, visual, and content analysis.
+This implementation focuses on:
+1. Multi-modal feature fusion
+2. Advanced scoring algorithms
+3. Better segment ranking
+4. Content-aware selection
 """
 import logging
-from typing import Dict, List, Any, cast
+import numpy as np
+from typing import Dict, List, Any, Optional, Tuple, Callable
 from dataclasses import dataclass
-from typing import Optional
+from pathlib import Path
+import asyncio
 
-from ..pipeline.core import VideoProcessor, Context, PipelineError, Segment
+from ..pipeline.core import VideoProcessor, Context, PipelineError, Segment, Progress, ProcessingStatus, CancellationToken
+from ..analyzers import get_analyzer
 
 logger = logging.getLogger(__name__)
 
 @dataclass
-class HighlightScore:
-    """Scores for different aspects of a highlight segment."""
-    audio: float = 0.0
-    visual: float = 0.0
-    content: float = 0.0
-    scene_change: float = 0.0
-    silence_penalty: float = 0.0
+class AdvancedSegmentFeatures:
+    """Comprehensive features for a video segment."""
+    # Basic features
+    start: float
+    end: float
+    duration: float
     
-    @property
-    def total(self) -> float:
-        return self.audio + self.visual + self.content + self.scene_change - self.silence_penalty
+    # Audio features
+    audio_energy: float = 0.0
+    audio_variance: float = 0.0
+    spectral_centroid: float = 0.0
+    zero_crossing_rate: float = 0.0
+    mfcc_features: List[float] = None
+    speech_probability: float = 0.0
+    music_probability: float = 0.0
+    
+    # Visual features
+    motion_intensity: float = 0.0
+    scene_complexity: float = 0.0
+    face_count: int = 0
+    face_prominence: float = 0.0
+    brightness: float = 0.0
+    contrast: float = 0.0
+    colorfulness: float = 0.0
+    sharpness: float = 0.0
+    
+    # Content features
+    word_count: int = 0
+    speaking_rate: float = 0.0
+    sentiment_polarity: float = 0.0
+    sentiment_subjectivity: float = 0.0
+    keyword_density: float = 0.0
+    question_count: int = 0
+    exclamation_count: int = 0
+    caps_ratio: float = 0.0
+    
+    # Context features
+    position_in_video: float = 0.0
+    silence_ratio: float = 0.0
+    scene_change_proximity: float = 0.0
+    speaker_change: bool = False
+    
+    # Engagement indicators
+    energy_peaks: int = 0
+    topic_transition: bool = False
+    emotional_intensity: float = 0.0
+    
+    def __post_init__(self):
+        if self.mfcc_features is None:
+            self.mfcc_features = []
 
-class EnhancedHighlightDetector(VideoProcessor):
-    """
-    Enhanced highlight detector that uses multi-modal analysis to identify
-    the most engaging segments of a video.
+@dataclass
+class HighlightScore:
+    """Detailed scoring breakdown for highlights."""
+    audio_score: float = 0.0
+    visual_score: float = 0.0
+    content_score: float = 0.0
+    engagement_score: float = 0.0
+    context_score: float = 0.0
+    diversity_bonus: float = 0.0
+    total_score: float = 0.0
     
-    This processor analyzes segments from the context and assigns highlight
-    scores based on audio, visual, and content features. It selects the top
-    segments up to a target duration and stores them in the context.
+    # Sub-scores for interpretability
+    energy_subscore: float = 0.0
+    motion_subscore: float = 0.0
+    speech_subscore: float = 0.0
+    sentiment_subscore: float = 0.0
+    face_subscore: float = 0.0
+
+class OpusClipLevelHighlightDetector(VideoProcessor):
+    """
+    Advanced highlight detector that rivals OpusClip quality.
+    
+    Key improvements:
+    1. Comprehensive multi-modal feature extraction
+    2. Advanced scoring algorithms with sub-component analysis
+    3. Content-aware segment selection
+    4. Diversity optimization
+    5. Context-sensitive weighting
     """
     
     def __init__(
         self,
-        min_duration: float = 2.0,
-        max_duration: float = 15.0,
+        min_duration: float = 3.0,
+        max_duration: float = 20.0,
         target_total_duration: float = 60.0,
-        audio_weight: float = 0.4,
-        visual_weight: float = 0.3,
-        content_weight: float = 0.3,
-        scene_change_bonus: float = 0.2,
-        silence_penalty: float = 0.3,
-        face_detection_enabled: bool = True,
-        motion_analysis_enabled: bool = True,
-        sentiment_analysis_enabled: bool = True
+        audio_weight: float = 0.25,
+        visual_weight: float = 0.35,
+        content_weight: float = 0.25,
+        engagement_weight: float = 0.15,
+        diversity_lambda: float = 0.3,
+        quality_threshold: float = 0.4,
+        max_highlights: int = 10
     ):
-        """
-        Initialize the enhanced highlight detector.
-        
-        Args:
-            min_duration: Minimum duration of a highlight segment (seconds)
-            max_duration: Maximum duration of a highlight segment (seconds)
-            target_total_duration: Target total duration of all highlights (seconds)
-            audio_weight: Weight for audio features in scoring (0-1)
-            visual_weight: Weight for visual features in scoring (0-1)
-            content_weight: Weight for content features in scoring (0-1)
-            scene_change_bonus: Bonus score for segments near scene changes
-            silence_penalty: Penalty for segments with high silence ratio
-            face_detection_enabled: Whether to perform face detection
-            motion_analysis_enabled: Whether to analyze motion
-            sentiment_analysis_enabled: Whether to analyze sentiment in text
-        """
+        """Initialize the advanced highlight detector."""
         self.min_duration = min_duration
         self.max_duration = max_duration
         self.target_total_duration = target_total_duration
-        self.scene_change_bonus = scene_change_bonus
-        self.silence_penalty = silence_penalty
-        self.face_detection_enabled = face_detection_enabled
-        self.motion_analysis_enabled = motion_analysis_enabled
-        self.sentiment_analysis_enabled = sentiment_analysis_enabled
+        self.audio_weight = audio_weight
+        self.visual_weight = visual_weight
+        self.content_weight = content_weight
+        self.engagement_weight = engagement_weight
+        self.diversity_lambda = diversity_lambda
+        self.quality_threshold = quality_threshold
+        self.max_highlights = max_highlights
         
-        # Normalize weights to sum to 1
-        total = audio_weight + visual_weight + content_weight
-        if total > 0:
-            self.audio_weight = audio_weight / total
-            self.visual_weight = visual_weight / total
-            self.content_weight = content_weight / total
-        else:
-            self.audio_weight = 0.33
-            self.visual_weight = 0.33
-            self.content_weight = 0.34
-    
-    def process(self, context: Context) -> Context:
-        """
-        Process segments to detect highlights.
+        # Initialize analyzers
+        self.analyzers = {}
         
-        Args:
-            context: The processing context containing segments and features
-            
-        Returns:
-            Updated context with highlight segments
-            
-        Raises:
-            PipelineError: If highlight detection fails
-        """
+    async def initialize_analyzers(self):
+        """Initialize all analyzers."""
         try:
-            logger.info("Starting enhanced highlight detection")
+            self.analyzers['audio'] = get_analyzer('audio', sample_rate=16000)
+            self.analyzers['visual'] = get_analyzer('visual', frame_rate=2.0)
+            self.analyzers['content'] = get_analyzer('content')
             
-            if not hasattr(context, 'segments') or not context.segments:
-                logger.warning("No segments found in context, skipping highlight detection")
+            for analyzer in self.analyzers.values():
+                await analyzer.initialize()
+                
+        except Exception as e:
+            logger.warning(f"Some analyzers failed to initialize: {e}")
+    
+    async def cleanup_analyzers(self):
+        """Cleanup analyzers."""
+        for analyzer in self.analyzers.values():
+            try:
+                await analyzer.cleanup()
+            except Exception as e:
+                logger.warning(f"Error cleaning up analyzer: {e}")
+    
+    def process(
+        self,
+        context: Context,
+        progress_callback: Optional[Callable[[Progress], None]] = None,
+        cancel_token: Optional[CancellationToken] = None
+    ) -> Context:
+        """Process segments to detect high-quality highlights."""
+        return asyncio.run(self._async_process(context, progress_callback, cancel_token))
+    
+    async def _async_process(
+        self,
+        context: Context,
+        progress_callback: Optional[Callable[[Progress], None]] = None,
+        cancel_token: Optional[CancellationToken] = None
+    ) -> Context:
+        """Async implementation of the processing."""
+        cancel_token = cancel_token or CancellationToken()
+        
+        try:
+            # Initialize analyzers
+            self._update_progress(progress_callback, 0, 6, ProcessingStatus.RUNNING, "Initializing analyzers")
+            await self.initialize_analyzers()
+            
+            # Extract comprehensive features
+            self._update_progress(progress_callback, 1, 6, ProcessingStatus.RUNNING, "Extracting features")
+            cancel_token.check_cancelled()
+            
+            segments = getattr(context, 'segments', [])
+            if not segments:
+                logger.warning("No segments found for highlight detection")
                 return context
             
-            # Score each segment
-            scored_segments = []
-            for i, segment in enumerate(context.segments):
-                score = self._score_segment(segment, context, i, len(context.segments))
-                scored_segments.append((segment, score))
+            # Extract features for all segments
+            segment_features = await self._extract_comprehensive_features(
+                segments, context, cancel_token
+            )
             
-            # Sort by total score (descending)
-            scored_segments.sort(key=lambda x: x[1].total, reverse=True)
+            # Score segments
+            self._update_progress(progress_callback, 3, 6, ProcessingStatus.RUNNING, "Scoring segments")
+            cancel_token.check_cancelled()
             
-            # Select top segments up to target duration
-            selected_segments = []
-            total_duration = 0.0
+            scored_segments = self._score_segments_advanced(segment_features, context)
             
-            for segment, score in scored_segments:
-                segment_duration = segment.end - segment.start
-                
-                # Skip segments that are too short or too long
-                if segment_duration < self.min_duration or segment_duration > self.max_duration:
-                    continue
-                    
-                # Check if adding this segment would exceed target duration
-                if total_duration + segment_duration > self.target_total_duration and total_duration > 0:
-                    break
-                    
-                # Add segment to highlights with annotations
-                selected_segments.append({
-                    'start': segment.start,
-                    'end': segment.end,
-                    'score': score.total,
-                    'score_details': {
-                        'audio': score.audio,
-                        'visual': score.visual,
-                        'content': score.content,
-                        'scene_change': score.scene_change,
-                        'silence_penalty': score.silence_penalty
-                    },
-                    'text': getattr(segment, 'text', ''),
-                    'speaker': getattr(segment, 'speaker', None),
-                    'annotations': {
-                        'scene_change': getattr(segment, 'scene_change', False),
-                        'silence_ratio': getattr(segment, 'silence_ratio', 0.0),
-                        'is_silent': getattr(segment, 'is_silent', False),
-                        'scene_boundary': getattr(segment, 'scene_boundary', False)
-                    }
-                })
-                total_duration += segment_duration
+            # Select diverse highlights
+            self._update_progress(progress_callback, 4, 6, ProcessingStatus.RUNNING, "Selecting highlights")
+            cancel_token.check_cancelled()
             
-            # Store results in context
-            context.highlights = selected_segments
+            highlights = self._select_diverse_highlights(scored_segments, context)
+            
+            # Post-process and rank
+            self._update_progress(progress_callback, 5, 6, ProcessingStatus.RUNNING, "Post-processing")
+            final_highlights = self._post_process_highlights(highlights, context)
+            
+            # Store results
+            context.highlights = final_highlights
             context.metadata['highlight_selection'] = {
-                'total_duration': total_duration,
-                'segment_count': len(selected_segments),
-                'target_duration': min(self.target_total_duration, total_duration)
+                'total_candidates': len(segments),
+                'scored_segments': len(scored_segments),
+                'selected_highlights': len(final_highlights),
+                'total_duration': sum(h.get('duration', 0) for h in final_highlights),
+                'avg_score': np.mean([h.get('score', 0) for h in final_highlights]) if final_highlights else 0
             }
             
-            logger.info(f"Selected {len(selected_segments)} highlight segments "
-                      f"(total duration: {total_duration:.1f}s)")
+            self._update_progress(progress_callback, 6, 6, ProcessingStatus.COMPLETED, "Highlight detection complete")
             
+            logger.info(f"Selected {len(final_highlights)} high-quality highlights")
             return context
             
         except Exception as e:
-            raise PipelineError(f"Highlight detection failed: {str(e)}") from e
+            error_msg = f"Advanced highlight detection failed: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            raise PipelineError(error_msg) from e
+        finally:
+            await self.cleanup_analyzers()
     
-    def _score_segment(self, segment: Segment, context: Context, 
-                      segment_idx: int = 0, total_segments: int = 1) -> HighlightScore:
-        # Initialize with default weights if not set
-        if not hasattr(self, 'audio_weight'):
-            self.audio_weight = 0.4
-            self.visual_weight = 0.3
-            self.content_weight = 0.3
+    async def _extract_comprehensive_features(
+        self, 
+        segments: List[Segment], 
+        context: Context,
+        cancel_token: CancellationToken
+    ) -> List[AdvancedSegmentFeatures]:
+        """Extract comprehensive features for all segments."""
+        features_list = []
+        
+        for i, segment in enumerate(segments):
+            cancel_token.check_cancelled()
             
-        # Calculate position-based scoring
-        position_ratio = segment_idx / max(1, total_segments - 1)
-        position_score = 1.0 - abs(0.5 - position_ratio) * 1.5  # Peak at middle
-        """
-        Score a segment based on various features including scene changes, silence, and audio features.
-        
-        Args:
-            segment: The segment to score
-            context: Processing context with scene changes and silence info
-            segment_idx: Index of the current segment
-            total_segments: Total number of segments
-            
-        Returns:
-            HighlightScore object with component scores
-        """
-        score = HighlightScore()
-        
-        # Initialize annotations if not present
-        if not hasattr(segment, 'annotations'):
-            segment.annotations = {}
-        
-        # Check for scene changes at segment boundaries
-        if hasattr(context, 'scene_changes'):
-            # Check if this segment starts or ends at a scene boundary
-            scene_boundary = any(
-                abs(segment.start - scene_time) < 0.5 or 
-                abs(segment.end - scene_time) < 0.5
-                for scene_time in context.scene_changes
+            features = AdvancedSegmentFeatures(
+                start=segment.start,
+                end=segment.end,
+                duration=segment.end - segment.start,
+                position_in_video=segment.start / getattr(context, 'duration', 1)
             )
-            segment.scene_boundary = scene_boundary
-            segment.annotations['scene_boundary'] = scene_boundary
             
-            # Check if this segment contains a scene change
-            if hasattr(segment, 'scene_change') and segment.scene_change:
-                score.scene_change = self.scene_change_bonus
-                segment.annotations['scene_change'] = True
-        
-        # Process silence information
-        if hasattr(context, 'silence_segments'):
-            # Calculate silence ratio for this segment
-            silence_duration = 0.0
-            for silence_start, silence_end in context.silence_segments:
-                # Calculate overlap between silence and segment
-                overlap_start = max(segment.start, silence_start)
-                overlap_end = min(segment.end, silence_end)
-                if overlap_start < overlap_end:
-                    silence_duration += (overlap_end - overlap_start)
+            # Extract audio features
+            if 'audio' in self.analyzers:
+                await self._extract_audio_features(features, segment, context)
             
-            segment_duration = segment.end - segment.start
-            silence_ratio = silence_duration / segment_duration if segment_duration > 0 else 0.0
-            segment.silence_ratio = silence_ratio
-            segment.is_silent = silence_ratio > 0.5  # Consider segment silent if >50% is silence
+            # Extract visual features
+            if 'visual' in self.analyzers:
+                await self._extract_visual_features(features, segment, context)
             
-            segment.annotations.update({
-                'silence_ratio': silence_ratio,
-                'is_silent': segment.is_silent
-            })
+            # Extract content features
+            if 'content' in self.analyzers:
+                await self._extract_content_features(features, segment, context)
             
-            # Apply silence penalty
-            if silence_ratio > 0.1:  # Only apply penalty for significant silence
-                score.silence_penalty = silence_ratio * self.silence_penalty
+            # Calculate context features
+            self._calculate_context_features(features, segment, context, i, len(segments))
+            
+            features_list.append(features)
         
-        # Audio features scoring
-        audio_score = 0.0
-        audio_features = {}
-        
-        # Energy-based scoring
-        if hasattr(segment, 'energy_ratio'):
-            # Higher energy is generally better, but not too high (avoid distortion)
-            energy_score = min(1.0, segment.energy_ratio * 1.2)  # Cap at 1.2x average energy
-            audio_features['energy'] = energy_score
-            audio_score += energy_score * 0.4  # 40% weight to energy
-        
-        # Spectral centroid (brightness of sound)
-        if hasattr(segment, 'spectral_centroid_mean'):
-            # Higher spectral centroid indicates brighter sounds (speech, music)
-            # Normalize to 0-1 range (assuming typical speech range 100-4000 Hz)
-            centroid_score = min(1.0, max(0.0, (segment.spectral_centroid_mean - 100) / 3900))
-            audio_features['spectral_centroid'] = centroid_score
-            audio_score += centroid_score * 0.3  # 30% weight to spectral centroid
-        
-        # Zero crossing rate (noise vs tonal sounds)
-        if hasattr(segment, 'zcr_mean'):
-            # Moderate ZCR is good (too high = noise, too low = silence)
-            zcr_score = 1.0 - abs(0.1 - min(0.2, segment.zcr_mean)) * 5  # Peak around 0.1
-            audio_features['zcr'] = zcr_score
-            audio_score += zcr_score * 0.2  # 20% weight to ZCR
-        
-        # Spectral bandwidth (complexity of sound)
-        if hasattr(segment, 'spectral_bandwidth_mean'):
-            # Moderate bandwidth is good (too high = noise, too low = simple tones)
-            bandwidth_score = min(1.0, segment.spectral_bandwidth_mean / 2000)  # Normalize
-            audio_features['bandwidth'] = bandwidth_score
-            audio_score += bandwidth_score * 0.1  # 10% weight to bandwidth
-        
-        # Normalize audio score to 0-1 range
-        audio_score = min(1.0, max(0.0, audio_score))
-        
-        # Apply silence penalty
-        score.audio = audio_score * self.audio_weight
-        
-        # Visual features analysis
-        visual_score = 0.3  # Default score if no visual features
-        if hasattr(segment, 'visual_features'):
-            visual_score = self._analyze_visual(segment, segment.visual_features)
-        score.visual = visual_score * self.visual_weight
-        
-        # Content analysis
-        content_score = 0.3  # Default score if no content features
-        if hasattr(context, 'transcription'):
-            content_score = self._analyze_content(segment, context.transcription)
-        if hasattr(segment, 'text') and segment.text:
-            # Simple heuristic: longer text is better, but penalize silent segments
-            content_score = self._normalize(len(segment.text))
-            if getattr(segment, 'is_silent', False):
-                content_score *= 0.7  # 30% penalty for silent segments
-        score.content = content_score * self.content_weight
-        
-        # Store feature scores in segment annotations for debugging
-        segment.annotations.update({
-            'audio_score': score.audio,
-            'visual_score': score.visual,
-            'content_score': score.content,
-            'scene_change_bonus': score.scene_change,
-            'silence_penalty': score.silence_penalty,
-            'audio_features': audio_features,
-            'position_ratio': position_ratio,
-            'position_score': position_score,
-            'segment_idx': segment_idx,
-            'total_segments': total_segments
-        })
-        
-        return score
+        return features_list
     
-    def _normalize(self, value: float, min_val: float = 0.0, max_val: float = 1.0) -> float:
-        """Normalize a value to 0-1 range."""
-        if max_val <= min_val:
-            return 0.0
-        return max(0.0, min(1.0, (value - min_val) / (max_val - min_val)))
+    async def _extract_audio_features(
+        self, 
+        features: AdvancedSegmentFeatures, 
+        segment: Segment, 
+        context: Context
+    ):
+        """Extract detailed audio features."""
+        try:
+            # Get audio analysis results from context or run analysis
+            if hasattr(context, 'audio_analysis'):
+                audio_data = context.audio_analysis
+            else:
+                # Run audio analysis on the segment
+                analyzer = self.analyzers['audio']
+                result = await analyzer.analyze(Path(context.video_path))
+                audio_data = result.features
+            
+            # Extract time-specific features for this segment
+            if 'rms_energy' in audio_data:
+                features.audio_energy = float(audio_data['rms_energy'])
+            
+            if 'spectral_centroid' in audio_data:
+                features.spectral_centroid = float(audio_data['spectral_centroid'])
+            
+            if 'zcr' in audio_data:
+                features.zero_crossing_rate = float(audio_data['zcr'])
+            
+            # MFCC features
+            mfcc_keys = [k for k in audio_data.keys() if k.startswith('mfcc_') and k.endswith('_mean')]
+            features.mfcc_features = [audio_data[k] for k in mfcc_keys]
+            
+            # Speech/music classification
+            if 'is_speech' in audio_data:
+                features.speech_probability = float(audio_data['is_speech'])
+                features.music_probability = 1.0 - features.speech_probability
+            
+            # Energy variance (excitement indicator)
+            if hasattr(segment, 'audio_energy_variance'):
+                features.audio_variance = segment.audio_energy_variance
+            
+        except Exception as e:
+            logger.warning(f"Audio feature extraction failed: {e}")
     
-    def _create_default_segments(self, context: Context) -> List[Segment]:
-        """
-        Create default segments if none are provided.
-        
-        This is a fallback that creates segments of equal duration.
-        
-        Args:
-            context: The processing context
+    async def _extract_visual_features(
+        self, 
+        features: AdvancedSegmentFeatures, 
+        segment: Segment, 
+        context: Context
+    ):
+        """Extract detailed visual features."""
+        try:
+            # Get visual analysis results
+            if hasattr(context, 'visual_analysis'):
+                visual_data = context.visual_analysis
+            else:
+                analyzer = self.analyzers['visual']
+                result = await analyzer.analyze(Path(context.video_path))
+                visual_data = result.features
             
-        Returns:
-            List of created segments
-        """
-        if not hasattr(context, 'duration') or context.duration <= 0:
-            return []
+            # Motion intensity
+            if 'motion_energy_mean' in visual_data:
+                features.motion_intensity = float(visual_data['motion_energy_mean'])
             
-        segment_count = max(1, int(context.duration / self.max_duration))
-        segment_duration = context.duration / segment_count
-        
-        segments = []
-        for i in range(segment_count):
-            start = i * segment_duration
-            end = start + segment_duration if i < segment_count - 1 else context.duration
-            segments.append(Segment(start=start, end=end))
+            # Face detection
+            if 'face_count_mean' in visual_data:
+                features.face_count = int(visual_data['face_count_mean'])
+                features.face_prominence = float(visual_data.get('face_count_max', 0))
             
-        return segments
+            # Visual quality metrics
+            features.brightness = float(visual_data.get('brightness_mean', 0.5))
+            features.contrast = float(visual_data.get('contrast_mean', 0.5))
+            features.colorfulness = float(visual_data.get('colorfulness_mean', 0.5))
+            features.sharpness = float(visual_data.get('sharpness_mean', 0.5))
+            
+            # Scene complexity (based on edges, textures)
+            if 'sharpness_std' in visual_data:
+                features.scene_complexity = float(visual_data['sharpness_std'])
+            
+        except Exception as e:
+            logger.warning(f"Visual feature extraction failed: {e}")
     
-    def _analyze_audio(self, segment: Segment, audio_features: Dict[str, Any]) -> float:
-        """
-        Analyze audio features for the segment to determine engagement potential.
-        
-        Args:
-            segment: The segment to analyze
-            audio_features: Dictionary of audio features with keys like 'energy', 'pitch', 'speech_probability'
+    async def _extract_content_features(
+        self, 
+        features: AdvancedSegmentFeatures, 
+        segment: Segment, 
+        context: Context
+    ):
+        """Extract detailed content features."""
+        try:
+            text = getattr(segment, 'text', '') or ''
             
-        Returns:
-            Audio analysis score between 0 and 1, where 1 is most engaging
-        """
-        if not audio_features:
-            return 0.3  # Default score if no features available
+            if not text:
+                return
             
-        score = 0.0
-        
-        # Energy (loudness) - higher is better, but not too high
-        energy = audio_features.get('energy', 0.5)
-        energy_score = min(1.0, energy * 1.5)  # Cap at 1.5x average energy
-        
-        # Pitch variation - more variation is more engaging
-        pitch_var = audio_features.get('pitch_variance', 0.0)
-        pitch_score = min(1.0, pitch_var * 2.0)
-        
-        # Speech probability - prefer segments with clear speech
-        speech_prob = audio_features.get('speech_probability', 0.0)
-        
-        # Combine features with weights
-        score = (
-            0.5 * energy_score +
-            0.3 * pitch_score +
-            0.2 * speech_prob
-        )
-        
-        # Apply silence penalty if applicable
-        if getattr(segment, 'is_silent', False):
-            score *= 0.4  # 60% penalty for silent segments
+            # Basic text metrics
+            words = text.split()
+            features.word_count = len(words)
+            features.speaking_rate = features.word_count / features.duration if features.duration > 0 else 0
             
-        return min(1.0, max(0.0, score))  # Ensure 0-1 range
+            # Sentiment analysis
+            if hasattr(context, 'content_analysis'):
+                content_data = context.content_analysis
+                features.sentiment_polarity = float(content_data.get('avg_polarity', 0))
+                features.sentiment_subjectivity = float(content_data.get('avg_subjectivity', 0))
+            
+            # Engagement indicators
+            features.question_count = text.count('?')
+            features.exclamation_count = text.count('!')
+            
+            # Caps ratio (intensity indicator)
+            caps_words = sum(1 for word in words if word.isupper() and len(word) > 1)
+            features.caps_ratio = caps_words / len(words) if words else 0
+            
+            # Keyword density (topic relevance)
+            engagement_keywords = [
+                'amazing', 'incredible', 'wow', 'awesome', 'fantastic', 'unbelievable',
+                'important', 'crucial', 'essential', 'key', 'significant',
+                'first', 'finally', 'conclusion', 'summary', 'result'
+            ]
+            
+            keyword_count = sum(1 for word in words if word.lower() in engagement_keywords)
+            features.keyword_density = keyword_count / len(words) if words else 0
+            
+            # Emotional intensity
+            features.emotional_intensity = (
+                abs(features.sentiment_polarity) + 
+                features.sentiment_subjectivity +
+                features.caps_ratio +
+                (features.question_count + features.exclamation_count) / max(1, len(words)) * 10
+            ) / 4
+            
+        except Exception as e:
+            logger.warning(f"Content feature extraction failed: {e}")
     
-    def _analyze_visual(self, segment: Segment, visual_features: Dict[str, Any]) -> float:
-        """
-        Analyze visual features to determine engagement potential.
+    def _calculate_context_features(
+        self, 
+        features: AdvancedSegmentFeatures, 
+        segment: Segment, 
+        context: Context,
+        segment_index: int,
+        total_segments: int
+    ):
+        """Calculate context-dependent features."""
+        # Silence ratio
+        if hasattr(context, 'silence_sections'):
+            silence_duration = 0
+            for silence in context.silence_sections:
+                overlap_start = max(features.start, silence.get('start', 0))
+                overlap_end = min(features.end, silence.get('end', 0))
+                if overlap_end > overlap_start:
+                    silence_duration += overlap_end - overlap_start
+            features.silence_ratio = silence_duration / features.duration
         
-        Args:
-            segment: The segment to analyze
-            visual_features: Dictionary with keys like 'motion', 'contrast', 'face_detected'
-            
-        Returns:
-            Visual analysis score between 0 and 1, where 1 is most engaging
-        """
-        if not visual_features:
-            return 0.3  # Default score if no features available
-            
-        score = 0.0
+        # Scene change proximity
+        if hasattr(context, 'scene_changes'):
+            min_distance = float('inf')
+            for scene_time in context.scene_changes:
+                distance = min(abs(features.start - scene_time), abs(features.end - scene_time))
+                min_distance = min(min_distance, distance)
+            features.scene_change_proximity = 1.0 / (1.0 + min_distance) if min_distance != float('inf') else 0
         
-        # Motion - moderate motion is most engaging
-        motion = visual_features.get('motion', 0.5)
-        motion_score = 1.0 - abs(0.6 - motion) * 2  # Peak at 0.6 motion
-        
-        # Face detection - prefer segments with faces
-        face_score = 1.0 if visual_features.get('face_detected', False) else 0.3
-        
-        # Contrast - higher contrast is generally more engaging
-        contrast = visual_features.get('contrast', 0.5)
-        contrast_score = min(1.0, contrast * 1.5)
-        
-        # Combine features with weights
-        score = (
-            0.4 * motion_score +
-            0.4 * face_score +
-            0.2 * contrast_score
-        )
-        
-        # Boost score for scene boundaries
-        if getattr(segment, 'scene_boundary', False):
-            score = min(1.0, score * 1.3)  # 30% boost for scene boundaries
-            
-        return min(1.0, max(0.0, score))  # Ensure 0-1 range
+        # Energy peaks in audio
+        if hasattr(segment, 'energy_peaks'):
+            features.energy_peaks = len(segment.energy_peaks)
     
-    def _analyze_content(self, segment: Segment, transcription: List[Dict[str, Any]]) -> float:
-        """
-        Analyze content features to determine engagement potential.
+    def _score_segments_advanced(
+        self, 
+        segment_features: List[AdvancedSegmentFeatures], 
+        context: Context
+    ) -> List[Tuple[AdvancedSegmentFeatures, HighlightScore]]:
+        """Advanced scoring algorithm with multiple components."""
+        scored_segments = []
         
-        Args:
-            segment: The segment to analyze
-            transcription: List of transcription segments with 'text', 'start', 'end', 'confidence'
+        # Normalize features across all segments for relative scoring
+        feature_stats = self._calculate_feature_statistics(segment_features)
+        
+        for features in segment_features:
+            score = HighlightScore()
             
-        Returns:
-            Content analysis score between 0 and 1, where 1 is most engaging
-        """
-        if not transcription:
-            return 0.3  # Default score if no transcription
+            # Audio scoring
+            score.audio_score = self._score_audio_features(features, feature_stats)
+            score.energy_subscore = self._normalize_feature(features.audio_energy, feature_stats['audio_energy'])
             
-        # Find transcription segments that overlap with this video segment
-        relevant_segments = [
-            t for t in transcription 
-            if t['end'] >= segment.start and t['start'] <= segment.end
+            # Visual scoring
+            score.visual_score = self._score_visual_features(features, feature_stats)
+            score.motion_subscore = self._normalize_feature(features.motion_intensity, feature_stats['motion_intensity'])
+            score.face_subscore = self._normalize_feature(features.face_prominence, feature_stats['face_prominence'])
+            
+            # Content scoring
+            score.content_score = self._score_content_features(features, feature_stats)
+            score.speech_subscore = self._normalize_feature(features.speaking_rate, feature_stats['speaking_rate'])
+            score.sentiment_subscore = abs(features.sentiment_polarity) * features.sentiment_subjectivity
+            
+            # Engagement scoring
+            score.engagement_score = self._score_engagement_features(features, feature_stats)
+            
+            # Context scoring
+            score.context_score = self._score_context_features(features, context)
+            
+            # Calculate total score
+            score.total_score = (
+                score.audio_score * self.audio_weight +
+                score.visual_score * self.visual_weight +
+                score.content_score * self.content_weight +
+                score.engagement_score * self.engagement_weight
+            ) * (1.0 + score.context_score * 0.2)  # Context as a multiplier
+            
+            scored_segments.append((features, score))
+        
+        # Sort by total score
+        scored_segments.sort(key=lambda x: x[1].total_score, reverse=True)
+        
+        return scored_segments
+    
+    def _calculate_feature_statistics(self, features_list: List[AdvancedSegmentFeatures]) -> Dict[str, Dict[str, float]]:
+        """Calculate statistics for feature normalization."""
+        stats = {}
+        
+        # Define features to normalize
+        numeric_features = [
+            'audio_energy', 'spectral_centroid', 'zero_crossing_rate',
+            'motion_intensity', 'face_prominence', 'brightness', 'contrast',
+            'word_count', 'speaking_rate', 'emotional_intensity'
         ]
         
-        if not relevant_segments:
-            return 0.2  # No relevant transcription
+        for feature_name in numeric_features:
+            values = [getattr(f, feature_name, 0) for f in features_list]
+            stats[feature_name] = {
+                'mean': np.mean(values),
+                'std': np.std(values),
+                'min': np.min(values),
+                'max': np.max(values),
+                'median': np.median(values)
+            }
+        
+        return stats
+    
+    def _normalize_feature(self, value: float, stats: Dict[str, float]) -> float:
+        """Normalize a feature value using z-score with clipping."""
+        if stats['std'] == 0:
+            return 0.5
+        
+        z_score = (value - stats['mean']) / stats['std']
+        # Convert to 0-1 range, clipping at ±2 standard deviations
+        normalized = (np.clip(z_score, -2, 2) + 2) / 4
+        return float(normalized)
+    
+    def _score_audio_features(self, features: AdvancedSegmentFeatures, stats: Dict) -> float:
+        """Score audio features with sophisticated weighting."""
+        # Energy scoring (moderate energy is good, too high/low is bad)
+        energy_norm = self._normalize_feature(features.audio_energy, stats['audio_energy'])
+        energy_score = 1.0 - abs(energy_norm - 0.7) * 2  # Peak at 70th percentile
+        
+        # Spectral centroid (speech clarity)
+        spectral_score = self._normalize_feature(features.spectral_centroid, stats['spectral_centroid'])
+        
+        # Speech probability bonus
+        speech_bonus = features.speech_probability * 0.3
+        
+        # Combine with weights
+        audio_score = (
+            energy_score * 0.4 +
+            spectral_score * 0.3 +
+            features.speech_probability * 0.3
+        ) + speech_bonus
+        
+        return max(0, min(1, audio_score))
+    
+    def _score_visual_features(self, features: AdvancedSegmentFeatures, stats: Dict) -> float:
+        """Score visual features focusing on engagement indicators."""
+        # Motion scoring (moderate motion is engaging)
+        motion_norm = self._normalize_feature(features.motion_intensity, stats['motion_intensity'])
+        motion_score = 1.0 - abs(motion_norm - 0.6) * 1.5  # Peak at 60th percentile
+        
+        # Face presence bonus
+        face_score = min(1.0, features.face_count * 0.3 + features.face_prominence * 0.2)
+        
+        # Visual quality (contrast and sharpness)
+        quality_score = (features.contrast + features.sharpness) / 2
+        
+        # Combine
+        visual_score = (
+            max(0, motion_score) * 0.4 +
+            face_score * 0.35 +
+            quality_score * 0.25
+        )
+        
+        return max(0, min(1, visual_score))
+    
+    def _score_content_features(self, features: AdvancedSegmentFeatures, stats: Dict) -> float:
+        """Score content features for engagement and informativeness."""
+        # Speaking rate (moderate rate is best)
+        rate_norm = self._normalize_feature(features.speaking_rate, stats['speaking_rate'])
+        rate_score = 1.0 - abs(rate_norm - 0.6) * 1.2  # Optimal around 60th percentile
+        
+        # Emotional content
+        emotion_score = min(1.0, features.emotional_intensity * 0.8)
+        
+        # Keyword density
+        keyword_score = min(1.0, features.keyword_density * 2.0)
+        
+        # Question/exclamation bonus
+        engagement_bonus = min(0.3, (features.question_count + features.exclamation_count) * 0.1)
+        
+        content_score = (
+            max(0, rate_score) * 0.3 +
+            emotion_score * 0.3 +
+            keyword_score * 0.2 +
+            abs(features.sentiment_polarity) * features.sentiment_subjectivity * 0.2
+        ) + engagement_bonus
+        
+        return max(0, min(1, content_score))
+    
+    def _score_engagement_features(self, features: AdvancedSegmentFeatures, stats: Dict) -> float:
+        """Score overall engagement potential."""
+        engagement_score = (
+            features.emotional_intensity * 0.3 +
+            min(1.0, features.energy_peaks * 0.1) * 0.2 +
+            features.keyword_density * 0.2 +
+            (1.0 - features.silence_ratio) * 0.3
+        )
+        
+        return max(0, min(1, engagement_score))
+    
+    def _score_context_features(self, features: AdvancedSegmentFeatures, context: Context) -> float:
+        """Score context-dependent features."""
+        context_score = 0.0
+        
+        # Position in video (beginning and end get slight bonus)
+        position_bonus = 0.1 if features.position_in_video < 0.1 or features.position_in_video > 0.9 else 0.0
+        
+        # Scene change proximity bonus
+        scene_bonus = features.scene_change_proximity * 0.2
+        
+        # Speaker change bonus
+        speaker_bonus = 0.1 if features.speaker_change else 0.0
+        
+        context_score = position_bonus + scene_bonus + speaker_bonus
+        
+        return max(0, min(0.5, context_score))  # Cap context bonus
+    
+    def _select_diverse_highlights(
+        self, 
+        scored_segments: List[Tuple[AdvancedSegmentFeatures, HighlightScore]], 
+        context: Context
+    ) -> List[Dict[str, Any]]:
+        """Select diverse highlights using advanced selection algorithm."""
+        if not scored_segments:
+            return []
+        
+        # Filter by quality threshold
+        quality_segments = [
+            (features, score) for features, score in scored_segments
+            if score.total_score >= self.quality_threshold
+        ]
+        
+        if not quality_segments:
+            # If no segments meet threshold, take top 20% anyway
+            threshold_index = max(1, len(scored_segments) // 5)
+            quality_segments = scored_segments[:threshold_index]
+        
+        # Apply diversity selection
+        selected = []
+        total_duration = 0.0
+        
+        # Feature vectors for diversity calculation
+        feature_vectors = []
+        for features, score in quality_segments:
+            vector = np.array([
+                features.audio_energy,
+                features.motion_intensity,
+                features.speaking_rate,
+                features.emotional_intensity,
+                features.position_in_video,
+                score.total_score
+            ])
+            feature_vectors.append(vector)
+        
+        feature_vectors = np.array(feature_vectors)
+        if len(feature_vectors) > 0:
+            # Normalize feature vectors
+            feature_vectors = (feature_vectors - feature_vectors.mean(axis=0)) / (feature_vectors.std(axis=0) + 1e-8)
+        
+        selected_indices = set()
+        
+        # Greedy selection with diversity
+        while (len(selected) < self.max_highlights and 
+               total_duration < self.target_total_duration and 
+               len(selected_indices) < len(quality_segments)):
             
-        # Calculate content metrics
-        total_chars = sum(len(t.get('text', '')) for t in relevant_segments)
-        avg_confidence = sum(t.get('confidence', 0.5) for t in relevant_segments) / len(relevant_segments)
-        
-        # Text features
-        text = ' '.join(t.get('text', '') for t in relevant_segments)
-        text_length = len(text)
-        
-        # Simple heuristic: prefer segments with moderate text length
-        # (not too short, not too long)
-        if text_length < 20:  # Very short text
-            length_score = 0.3
-        elif text_length > 200:  # Very long text
-            length_score = 0.7
-        else:  # Ideal length
-            length_score = 1.0
+            best_score = -1
+            best_idx = -1
             
-        # Confidence score
-        confidence_score = avg_confidence
-        
-        # Combine scores
-        score = 0.6 * length_score + 0.4 * confidence_score
-        
-        # Apply penalties
-        if getattr(segment, 'is_silent', False):
-            score *= 0.7  # 30% penalty for silent segments
+            for i, (features, score) in enumerate(quality_segments):
+                if i in selected_indices:
+                    continue
+                
+                # Check duration constraint
+                if total_duration + features.duration > self.target_total_duration and selected:
+                    continue
+                
+                # Calculate diversity penalty
+                diversity_penalty = 0.0
+                if selected_indices and len(feature_vectors) > i:
+                    selected_vectors = feature_vectors[list(selected_indices)]
+                    current_vector = feature_vectors[i]
+                    
+                    # Calculate minimum distance to selected segments
+                    distances = np.linalg.norm(selected_vectors - current_vector, axis=1)
+                    diversity_penalty = np.exp(-np.min(distances)) * self.diversity_lambda
+                
+                # Combined score
+                combined_score = score.total_score * (1.0 - diversity_penalty)
+                
+                if combined_score > best_score:
+                    best_score = combined_score
+                    best_idx = i
             
-        return min(1.0, max(0.0, score))  # Ensure 0-1 range
+            if best_idx == -1:
+                break
+            
+            features, score = quality_segments[best_idx]
+            selected_indices.add(best_idx)
+            total_duration += features.duration
+            
+            highlight = {
+                'start': features.start,
+                'end': features.end,
+                'duration': features.duration,
+                'score': score.total_score,
+                'score_breakdown': {
+                    'audio': score.audio_score,
+                    'visual': score.visual_score,
+                    'content': score.content_score,
+                    'engagement': score.engagement_score,
+                    'context': score.context_score
+                },
+                'features': {
+                    'audio_energy': features.audio_energy,
+                    'motion_intensity': features.motion_intensity,
+                    'face_count': features.face_count,
+                    'speaking_rate': features.speaking_rate,
+                    'emotional_intensity': features.emotional_intensity,
+                    'word_count': features.word_count
+                }
+            }
+            selected.append(highlight)
+        
+        return selected
+    
+    def _post_process_highlights(self, highlights: List[Dict[str, Any]], context: Context) -> List[Dict[str, Any]]:
+        """Final post-processing of selected highlights."""
+        if not highlights:
+            return highlights
+        
+        # Sort by start time
+        highlights.sort(key=lambda x: x['start'])
+        
+        # Add metadata
+        for i, highlight in enumerate(highlights):
+            highlight['index'] = i
+            highlight['rank'] = i + 1
+            
+            # Add text if available
+            text_segments = []
+            if hasattr(context, 'transcription'):
+                for seg in context.transcription:
+                    if (seg.get('start', 0) >= highlight['start'] and 
+                        seg.get('end', 0) <= highlight['end']):
+                        text_segments.append(seg.get('text', ''))
+            
+            highlight['text'] = ' '.join(text_segments)
+        
+        return highlights
+    
+    def _update_progress(
+        self,
+        progress_callback: Optional[Callable[[Progress], None]],
+        current: int,
+        total: int,
+        status: ProcessingStatus = ProcessingStatus.RUNNING,
+        message: str = ""
+    ):
+        """Update progress if callback is provided."""
+        if progress_callback:
+            progress = Progress(
+                current=current,
+                total=total,
+                status=status,
+                message=message,
+                metadata={'processor': 'OpusClipLevelHighlightDetector'}
+            )
+            progress_callback(progress)
