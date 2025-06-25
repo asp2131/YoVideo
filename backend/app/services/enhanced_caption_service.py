@@ -124,22 +124,22 @@ def calculate_natural_word_durations(words: List[str], total_duration: float) ->
 def segments_to_professional_ass(segments: List[Dict]) -> str:
     """
     Convert segments to professional ASS format with word-by-word karaoke timing
-    like TikTok/Instagram Reels.
+    like TikTok/Instagram Reels with proper wrapping and professional styling.
     """
     
-    # Professional ASS header with modern styling
+    # Professional ASS header with modern styling and proper wrapping
     ass_header = """[Script Info]
 Title: Professional Short-Form Video Captions
 ScriptType: v4.00+
 PlayResX: 1080
 PlayResY: 1920
-WrapStyle: 2
+WrapStyle: 1
 ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial Black,84,&H00FFFFFF,&H00000000,&H00000000,&H80000000,-1,0,0,0,100,100,2,0,3,4,0,2,40,40,180,1
-Style: Highlight,Arial Black,84,&H0000FFFF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,105,105,2,0,3,5,0,2,40,40,180,1
+Style: Default,Arial Black,78,&H00FFFFFF,&H00000000,&H009966FF,&H00000000,-1,0,0,0,100,100,0,0,1,3,0,2,80,80,200,1
+Style: Highlight,Arial Black,78,&H00FFFFFF,&H009966FF,&H009966FF,&H00000000,-1,0,0,0,105,105,0,0,1,4,0,2,80,80,200,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -159,34 +159,23 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         if not group['words']:
             continue
             
-        # Create the karaoke effect for this sentence
-        karaoke_text = create_professional_karaoke_effect(group['words'])
+        # Create the karaoke effect for this sentence with proper wrapping
+        karaoke_text = create_professional_karaoke_effect_with_wrapping(group['words'])
         
         # Add pop-in animation for the whole sentence
         start_time = format_ass_time(group['start'])
         end_time = format_ass_time(group['end'])
         
-        # Main caption with word-by-word reveal
+        # Main caption with word-by-word reveal and proper wrapping
         animated_text = (
-            f"{{\\fade(0,255,0,255,0,200,400)"
-            f"\\move(540,960,540,960)"
-            f"\\t(0,300,\\fscx110\\fscy110\\bord5)"
-            f"\\t(300,500,\\fscx100\\fscy100\\bord4)}}"
+            f"{{\\q1\\fade(0,255,0,255,0,200,400)"
+            f"\\pos(540,1520)"
+            f"\\t(0,300,\\fscx105\\fscy105)"
+            f"\\t(300,500,\\fscx100\\fscy100)}}"
             f"{karaoke_text}"
         )
         
         ass_events.append(f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{animated_text}")
-        
-        # Add subtle shadow/background for readability
-        shadow_text = create_shadow_effect(group['words'])
-        shadow_animated = (
-            f"{{\\fade(0,255,0,255,0,200,400)"
-            f"\\move(544,964,544,964)"
-            f"\\c&H000000&\\alpha&H80&}}"
-            f"{shadow_text}"
-        )
-        
-        ass_events.append(f"Dialogue: -1,{start_time},{end_time},Default,,0,0,0,,{shadow_animated}")
     
     return ass_header + "\n".join(ass_events)
 
@@ -215,9 +204,9 @@ def group_words_by_sentences(word_timings: List[WordTiming], segments: List[Dict
         
         current_group.append(word_timing)
         
-        # Break on sentence-ending punctuation or max words per line
+        # Break on sentence-ending punctuation or max words per line for better wrapping
         if (word_timing.word.endswith(('.', '!', '?')) or 
-            len(current_group) >= 8):  # Max 8 words per caption line
+            len(current_group) >= 6):  # Reduced to 6 words per caption line for better wrapping
             
             groups.append({
                 'words': current_group,
@@ -237,14 +226,16 @@ def group_words_by_sentences(word_timings: List[WordTiming], segments: List[Dict
     return groups
 
 
-def create_professional_karaoke_effect(words: List[WordTiming]) -> str:
+def create_professional_karaoke_effect_with_wrapping(words: List[WordTiming]) -> str:
     """
-    Create professional karaoke effect with proper timing and emphasis.
+    Create professional karaoke effect with proper timing and automatic wrapping.
     """
     if not words:
         return ""
     
     karaoke_parts = []
+    current_line_length = 0
+    max_line_length = 35  # Characters per line for proper mobile display
     
     for i, word in enumerate(words):
         # Calculate duration in centiseconds for ASS
@@ -253,12 +244,19 @@ def create_professional_karaoke_effect(words: List[WordTiming]) -> str:
         # Ensure minimum duration for readability
         duration_cs = max(duration_cs, 30)  # Minimum 0.3 seconds
         
+        # Check if we need to wrap to new line
+        word_length = len(word.word)
+        if current_line_length + word_length + 1 > max_line_length and current_line_length > 0:
+            # Add line break and reset counter
+            karaoke_parts.append("\\N")  # Hard line break in ASS
+            current_line_length = 0
+        
         # Add emphasis effects for important words
         word_text = word.word
         if is_emphasis_word(word_text):
-            # Important words get extra styling
+            # Important words get extra styling with purple highlight
             word_effect = (
-                f"{{\\k{duration_cs}\\t(0,{duration_cs//2},\\fscx120\\fscy120\\c&H0099FF&)"
+                f"{{\\k{duration_cs}\\t(0,{duration_cs//2},\\fscx115\\fscy115\\c&H9966FF&)"
                 f"\\t({duration_cs//2},{duration_cs},\\fscx100\\fscy100\\c&HFFFFFF&)}}{word_text}"
             )
         else:
@@ -266,31 +264,14 @@ def create_professional_karaoke_effect(words: List[WordTiming]) -> str:
             word_effect = f"{{\\k{duration_cs}}}{word_text}"
         
         karaoke_parts.append(word_effect)
+        current_line_length += word_length
         
-        # Add space between words (except for the last word)
+        # Add space between words (except for the last word or before line breaks)
         if i < len(words) - 1:
             karaoke_parts.append(" ")
+            current_line_length += 1
     
     return "".join(karaoke_parts)
-
-
-def create_shadow_effect(words: List[WordTiming]) -> str:
-    """Create a shadow effect that follows the same timing as the main text."""
-    if not words:
-        return ""
-    
-    shadow_parts = []
-    
-    for i, word in enumerate(words):
-        duration_cs = int((word.end - word.start) * 100)
-        duration_cs = max(duration_cs, 30)
-        
-        shadow_parts.append(f"{{\\k{duration_cs}}}{word.word}")
-        
-        if i < len(words) - 1:
-            shadow_parts.append(" ")
-    
-    return "".join(shadow_parts)
 
 
 def is_emphasis_word(word: str) -> bool:
@@ -303,7 +284,8 @@ def is_emphasis_word(word: str) -> bool:
         'amazing', 'incredible', 'wow', 'awesome', 'fantastic', 'perfect',
         'love', 'hate', 'never', 'always', 'exactly', 'absolutely',
         'definitely', 'obviously', 'literally', 'actually', 'really',
-        'super', 'mega', 'ultra', 'best', 'worst', 'crazy', 'insane'
+        'super', 'mega', 'ultra', 'best', 'worst', 'crazy', 'insane',
+        'look', 'see', 'watch', 'check', 'here', 'this', 'that'
     }
     
     # Check if word is in emphasis list or is all caps
@@ -350,13 +332,13 @@ def optimize_caption_timing(segments: List[Dict]) -> List[Dict]:
 # Example usage function
 def create_professional_captions(segments: List[Dict]) -> str:
     """
-    Main function to create professional captions.
+    Main function to create professional captions with proper positioning and wrapping.
     
     Args:
         segments: List of transcription segments with 'text', 'start', 'end'
     
     Returns:
-        ASS subtitle content with professional word-by-word timing
+        ASS subtitle content with professional word-by-word timing and proper wrapping
     """
     if not segments:
         return ""
@@ -364,7 +346,7 @@ def create_professional_captions(segments: List[Dict]) -> str:
     # Optimize timing
     optimized_segments = optimize_caption_timing(segments)
     
-    # Generate professional ASS captions
+    # Generate professional ASS captions with proper wrapping
     ass_content = segments_to_professional_ass(optimized_segments)
     
     return ass_content
