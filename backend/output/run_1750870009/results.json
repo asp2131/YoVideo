@@ -1,0 +1,106 @@
+{
+  "status": "success",
+  "message": "Detected 4 highlights",
+  "duration": 417.736344,
+  "highlights": [
+    {
+      "start": 15.0,
+      "end": 30.0,
+      "duration": 15.0,
+      "score": 0.7206422925222014,
+      "score_breakdown": {
+        "audio": 0.8093534944245822,
+        "visual": 0.6181441346456309,
+        "content": 0.35200000000000004,
+        "engagement": 0.6,
+        "context": 0.1125
+      },
+      "features": {
+        "audio_energy": 1.0,
+        "motion_intensity": 0.0,
+        "speaking_rate": 0.0,
+        "emotional_intensity": 0.0,
+        "word_count": 0
+      },
+      "index": 0,
+      "rank": 1,
+      "text": ""
+    },
+    {
+      "start": 150.0,
+      "end": 165.0,
+      "duration": 15.0,
+      "score": 0.707075294380836,
+      "score_breakdown": {
+        "audio": 0.8093534944245822,
+        "visual": 0.6181441346456309,
+        "content": 0.35200000000000004,
+        "engagement": 0.6,
+        "context": 0.016250753019268042
+      },
+      "features": {
+        "audio_energy": 1.0,
+        "motion_intensity": 0.0,
+        "speaking_rate": 0.0,
+        "emotional_intensity": 0.0,
+        "word_count": 0
+      },
+      "index": 1,
+      "rank": 2,
+      "text": ""
+    },
+    {
+      "start": 225.0,
+      "end": 240.0,
+      "duration": 15.0,
+      "score": 0.7107668531478079,
+      "score_breakdown": {
+        "audio": 0.8093534944245822,
+        "visual": 0.6181441346456309,
+        "content": 0.35200000000000004,
+        "engagement": 0.6,
+        "context": 0.04244002110966644
+      },
+      "features": {
+        "audio_energy": 1.0,
+        "motion_intensity": 0.0,
+        "speaking_rate": 0.0,
+        "emotional_intensity": 0.0,
+        "word_count": 0
+      },
+      "index": 2,
+      "rank": 3,
+      "text": ""
+    },
+    {
+      "start": 375.0,
+      "end": 390.0,
+      "duration": 15.0,
+      "score": 0.7082643399985322,
+      "score_breakdown": {
+        "audio": 0.8093534944245822,
+        "visual": 0.6181441346456309,
+        "content": 0.35200000000000004,
+        "engagement": 0.6,
+        "context": 0.0246862775278223
+      },
+      "features": {
+        "audio_energy": 1.0,
+        "motion_intensity": 0.0,
+        "speaking_rate": 0.0,
+        "emotional_intensity": 0.0,
+        "word_count": 0
+      },
+      "index": 3,
+      "rank": 4,
+      "text": ""
+    }
+  ],
+  "segment_count": 28,
+  "highlight_count": 4,
+  "audio_features": {
+    "sample_rate": 16000,
+    "hop_length": 512,
+    "feature_count": 0
+  }
+}
