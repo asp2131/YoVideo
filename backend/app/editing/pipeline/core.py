@@ -273,15 +273,12 @@ class HighlightPipeline:
         """Request cancellation of the current pipeline execution."""
         self._cancel_token.cancel()
     
-    def run(self, initial_context: Context, 
-            progress_callback: Optional[Callable[[Progress], None]] = None,
-            cancel_token: Optional[CancellationToken] = None) -> Context:
-        """Run the pipeline on the given initial context.
+    def run(self, initial_context: Context) -> Context:
+        """
+        Run the pipeline on the given initial context.
         
         Args:
             initial_context: The initial context to process
-            progress_callback: Optional callback for progress updates
-            cancel_token: Optional cancellation token (not used in simplified version)
             
         Returns:
             The processed context after all stages
@@ -291,55 +288,12 @@ class HighlightPipeline:
         """
         current_context = initial_context
         
-        # Initialize progress
-        total_steps = len(self.stages)
-        
         try:
-            for i, stage in enumerate(self.stages, 1):
-                # Update progress
-                if progress_callback:
-                    progress = Progress(
-                        current=i-1,
-                        total=total_steps,
-                        status=ProcessingStatus.RUNNING,
-                        message=f"Running {stage.__class__.__name__}",
-                        metadata={'processor': stage.__class__.__name__}
-                    )
-                    progress_callback(progress)
-                
-                logger.info(f"Running processor: {stage.__class__.__name__}")
-                
-                # Run the processor with progress and cancellation
-                current_context = stage.process(
-                    current_context,
-                    progress_callback=progress_callback
-                )
-            
-            # Mark as completed
-            if progress_callback:
-                progress = Progress(
-                    current=total_steps,
-                    total=total_steps,
-                    status=ProcessingStatus.COMPLETED,
-                    message="Processing completed successfully"
-                )
-                progress_callback(progress)
+            for stage in self.stages:
+                current_context = stage.process(current_context)
             
             return current_context
             
         except Exception as e:
             logger.error(f"Pipeline failed: {str(e)}", exc_info=True)
-            if progress_callback:
-                progress = Progress(
-                    current=0,
-                    total=total_steps,
-                    status=ProcessingStatus.FAILED,
-                    message=f"Processing failed: {str(e)}"
-                )
-                progress_callback(progress)
-            
-            if isinstance(e, PipelineError):
-                raise
             raise PipelineError(f"Pipeline processing failed: {str(e)}") from e
-    """Custom exception for pipeline-related errors."""
-    pass
