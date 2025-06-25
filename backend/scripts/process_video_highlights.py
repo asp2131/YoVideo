@@ -28,11 +28,12 @@ except ImportError:
     logger.warning("librosa or matplotlib not available. Audio feature extraction will be disabled.")
 
 # Import local modules
-from app.editing.pipeline.core import Context, Segment
+from app.editing.pipeline.core import Context, Segment, HighlightPipeline
 from app.editing.processors.enhanced_highlight_detector import OpusClipLevelHighlightDetector as EnhancedHighlightDetector
-from app.editing.segmenters.intelligent_segmenter import IntelligentSegmenter
-from app.editing.utils.ffmpeg_utils import run_ffmpeg
-from app.editing.utils.video_utils import extract_audio, get_video_info
+from app.editing.processors.scene_detector import SceneDetector
+from app.editing.processors.silence_remover import SilenceRemover
+from app.editing.segmenters.basic import BasicSegmenter
+from app.editing.utils.video_utils import get_video_info
 
 # Configure logging
 log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -46,50 +47,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from app.editing.segmenters.intelligent_segmenter import IntelligentSegmenter
-from app.editing.utils.ffmpeg_utils import run_ffmpeg
-import tempfile
-import os
-import numpy as np
-import librosa
-import json
-from typing import List, Dict, Any, Tuple
-
-def extract_audio_features(audio_path: str, sample_rate: int = 16000, hop_length: int = 512) -> Dict[str, np.ndarray]:
-    """Extract audio features using librosa."""
-    try:
-        # Load audio file
-        y, sr = librosa.load(audio_path, sr=sample_rate)
-        
-        # Extract features
-        features = {}
-        
-        # Time-domain features
-        features['rms_energy'] = librosa.feature.rms(y=y, hop_length=hop_length)[0]
-        features['zcr'] = librosa.feature.zero_crossing_rate(y, hop_length=hop_length)[0]
-        
-        # Frequency-domain features
-        S = np.abs(librosa.stft(y, hop_length=hop_length))
-        features['spectral_centroid'] = librosa.feature.spectral_centroid(S=S, sr=sr)[0]
-        features['spectral_bandwidth'] = librosa.feature.spectral_bandwidth(S=S, sr=sr)[0]
-        features['spectral_rolloff'] = librosa.feature.spectral_rolloff(S=S, sr=sr)[0]
-        
-        # MFCCs
-        mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13, hop_length=hop_length)
-        for i, mf in enumerate(mfcc):
-            features[f'mfcc_{i}'] = mf
-        
-        # Calculate frame times
-        times = librosa.times_like(features['rms_energy'], sr=sr, hop_length=hop_length)
-        features['times'] = times
-        
-        return features
-    except Exception as e:
-        logger.error(f"Error extracting audio features: {e}")
-        return {}
-
 def extract_audio(video_path: str, output_path: str) -> bool:
     """Extract audio from video using FFmpeg."""
+    import subprocess
+    
     cmd = [
         'ffmpeg',
         '-y',  # Overwrite output file if it exists
@@ -102,129 +63,11 @@ def extract_audio(video_path: str, output_path: str) -> bool:
     ]
     
     try:
-        run_ffmpeg(cmd)
+        subprocess.run(cmd, check=True, capture_output=True)
         return True
     except Exception as e:
         logger.error(f"Error extracting audio: {e}")
         return False
-
-def map_features_to_segments(
-    segments: List[Dict[str, Any]], 
-    audio_features: Dict[str, np.ndarray],
-    sample_rate: int = 16000,
-    hop_length: int = 512
-) -> List[Dict[str, Any]]:
-    """
-    Map audio features to segments.
-    
-    Args:
-        segments: List of segment dictionaries with 'start' and 'end' times
-        audio_features: Dictionary of audio features with 'times' array
-        sample_rate: Audio sample rate
-        hop_length: Hop length used in feature extraction
-        
-    Returns:
-        List of segments with audio features added
-    """
-    if not audio_features or 'times' not in audio_features:
-        logger.warning("No audio features or timestamps found")
-        return segments
-    
-    times = audio_features['times']
-    
-    for segment in segments:
-        start_time = segment['start']
-        end_time = segment['end']
-        
-        # Find indices of frames within this segment
-        frame_mask = (times >= start_time) & (times <= end_time)
-        
-        # Skip if no frames in this segment
-        if not np.any(frame_mask):
-            logger.warning(f"No audio frames found in segment {start_time:.2f}-{end_time:.2f}")
-            continue
-        
-        # Calculate mean and max values for each feature in this segment
-        segment_features = {}
-        for feature_name, feature_values in audio_features.items():
-            if feature_name == 'times':
-                continue
-                
-            segment_values = feature_values[frame_mask]
-            if len(segment_values) == 0:
-                continue
-                
-            # Calculate statistics for this feature in this segment
-            segment_features[f'{feature_name}_mean'] = float(np.mean(segment_values))
-            segment_features[f'{feature_name}_max'] = float(np.max(segment_values))
-            
-            # For energy, also calculate ratio to overall mean
-            if 'rms_energy' in feature_name:
-                overall_mean = np.mean(feature_values) if len(feature_values) > 0 else 1.0
-                segment_features['energy_ratio'] = float(np.mean(segment_values) / (overall_mean + 1e-10))
-        
-        # Add features to segment
-        segment.update(segment_features)
-    
-    return segments
-
-def plot_audio_features(audio_features: Dict[str, np.ndarray], output_path: str):
-    """Plot audio features for visualization."""
-    if not audio_features or 'times' not in audio_features:
-        return
-    
-    times = audio_features['times']
-    
-    # Create subplots
-    fig, axes = plt.subplots(4, 1, figsize=(12, 10), sharex=True)
-    
-    # Plot RMS Energy
-    if 'rms_energy' in audio_features:
-        axes[0].plot(times, audio_features['rms_energy'], label='RMS Energy')
-        axes[0].set_ylabel('Amplitude')
-        axes[0].set_title('RMS Energy')
-        axes[0].grid(True)
-    
-    # Plot Spectral Centroid
-    if 'spectral_centroid' in audio_features:
-        axes[1].plot(times, audio_features['spectral_centroid'], label='Spectral Centroid', color='g')
-        axes[1].set_ylabel('Hz')
-        axes[1].set_title('Spectral Centroid (Brightness)')
-        axes[1].grid(True)
-    
-    # Plot Zero Crossing Rate
-    if 'zcr' in audio_features:
-        axes[2].plot(times, audio_features['zcr'], label='ZCR', color='r')
-        axes[2].set_ylabel('Rate')
-        axes[2].set_title('Zero Crossing Rate')
-        axes[2].grid(True)
-    
-    # Plot MFCCs (first 5 coefficients)
-    mfccs = [f'mfcc_{i}' for i in range(5) if f'mfcc_{i}' in audio_features]
-    if mfccs:
-        for i, mfcc in enumerate(mfccs[:5]):  # Only plot first 5 MFCCs for clarity
-            axes[3].plot(times, audio_features[mfcc], label=f'MFCC {i}')
-        axes[3].set_xlabel('Time (s)')
-        axes[3].set_ylabel('Coefficient')
-        axes[3].set_title('MFCCs')
-        axes[3].legend()
-        axes[3].grid(True)
-    
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=150, bbox_inches='tight')
-    plt.close()
-    logger.info(f"Saved audio feature visualization to {output_path}")
-
-async def _process_video_async(
-    pipeline: Any,
-    input_path: str,
-    output_dir: Optional[str] = None
-) -> Dict[str, Any]:
-    """Helper function to run the async video processing."""
-    return await pipeline.process_video_to_opus_clip_quality(
-        video_path=input_path,
-        output_dir=output_dir
-    )
 
 def detect_highlights(
     input_path: Union[str, Path],
@@ -280,111 +123,61 @@ def detect_highlights(
         # Extract audio for analysis
         audio_file = temp_dir / 'audio.wav'
         logger.info(f"Extracting audio to {audio_file}")
-        extract_audio(
-            str(input_path),
-            str(audio_file)
-        )
-        
-        # Load audio for feature extraction
-        y, sr = librosa.load(str(audio_file), sr=sample_rate)
-        
-        # Extract audio features
-        logger.info("Extracting audio features")
-        features = {}
-        
-        # Extract various audio features
-        features['rms'] = librosa.feature.rms(y=y, hop_length=hop_length)[0]
-        features['spectral_centroid'] = librosa.feature.spectral_centroid(
-            y=y, sr=sr, hop_length=hop_length)[0]
-        features['zcr'] = librosa.feature.zero_crossing_rate(
-            y, hop_length=hop_length)[0]
-        features['spectral_bandwidth'] = librosa.feature.spectral_bandwidth(
-            y=y, sr=sr, hop_length=hop_length)[0]
-        features['spectral_rolloff'] = librosa.feature.spectral_rolloff(
-            y=y, sr=sr, hop_length=hop_length)[0]
-        
-        # Extract MFCCs
-        mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13, hop_length=hop_length)
-        for i, mfcc in enumerate(mfccs):
-            features[f'mfcc_{i}'] = mfcc
-        
-        # Calculate time points for each feature frame
-        times = librosa.times_like(features['rms'], sr=sr, hop_length=hop_length)
+        if not extract_audio(str(input_path), str(audio_file)):
+            logger.warning("Failed to extract audio, continuing without audio analysis")
         
         # Create context for the highlight detector
         context = Context(
-            video_path=str(input_path)
+            video_path=str(input_path),
+            duration=duration,
+            output_dir=str(output_dir)
         )
-        context.temp_dir = str(temp_dir)
-        context.sample_rate = sample_rate
-        context.hop_length = hop_length
-        context.feature_times = times
-        context.audio_features = features
         
-        # Create segments using OpusClipLevelPipeline
-        logger.info("Creating segments using OpusClipLevelPipeline")
+        # Create processing pipeline
+        logger.info("Creating processing pipeline")
         
-        # Create a configuration object
-        from app.editing.segmenters.intelligent_segmenter import OpusClipConfig
-        config = OpusClipConfig(
+        # Create processors
+        silence_remover = SilenceRemover(
+            silence_threshold=-30.0,
+            silence_duration=0.8
+        )
+        
+        scene_detector = SceneDetector(
+            threshold=0.3,
+            min_scene_len=1.5
+        )
+        
+        segmenter = BasicSegmenter(
             min_segment_duration=min_duration,
-            max_segment_duration=max_duration,
-            target_total_duration=target_duration,
-            min_highlight_duration=min_duration,
-            max_highlight_duration=max_duration,
-            quality_threshold=0.3
+            max_segment_duration=max_duration
         )
         
-        # Initialize the pipeline with the config
-        pipeline = IntelligentSegmenter(config=config)
-        
-        # Process the video to get highlights using asyncio.run()
-        logger.info("Processing video to extract highlights...")
-        import asyncio
-        results = asyncio.run(_process_video_async(
-            pipeline=pipeline,
-            input_path=str(input_path),
-            output_dir=str(output_dir) if output_dir else None
-        ))
-        
-        # Convert the results to segments
-        context.segments = [
-            Segment(
-                start=seg['start'],
-                end=seg['end'],
-                text=seg.get('text', ''),
-                speaker=seg.get('speaker', ''),
-                scene_change=seg.get('scene_change', False),
-                silent_ratio=seg.get('silence_ratio', 0.0),
-                word_count=len(seg.get('text', '').split()) if seg.get('text') else 0,
-                audio_peaks=seg.get('audio_peaks', 0.0),
-                visual_motion=seg.get('visual_motion', 0.0),
-                sentiment=seg.get('sentiment', 0.0)
-            )
-            for seg in results.get('segments', [])
-        ]
-        
-        logger.info(f"Created {len(context.segments)} segments")
-        
-        # Initialize the highlight detector with enhanced parameters
-        detector = EnhancedHighlightDetector(
+        highlight_detector = EnhancedHighlightDetector(
             min_duration=min_duration,
             max_duration=max_duration,
             target_total_duration=target_duration,
-            audio_weight=0.6,  # Higher weight for audio features
-            visual_weight=0.2,
-            content_weight=0.2,
-            scene_change_bonus=0.1,
-            silence_penalty=0.2,
-            face_detection_enabled=False,  # Disable face detection for now
-            motion_analysis_enabled=False  # Disable motion analysis for now
+            audio_weight=0.4,
+            visual_weight=0.3,
+            content_weight=0.3,
+            quality_threshold=min_highlight_score
         )
         
-        # Process the video to detect highlights
-        logger.info("Detecting highlights...")
-        context = detector.process(context)
+        # Create pipeline
+        pipeline = HighlightPipeline([
+            silence_remover,
+            scene_detector,
+            segmenter,
+            highlight_detector
+        ])
         
-        if not context.highlights:
+        # Process the video
+        logger.info("Processing video through pipeline...")
+        processed_context = pipeline.run(context)
+        
+        # Extract highlights
+        highlights = getattr(processed_context, 'highlights', [])
+        
+        if not highlights:
             logger.warning("No highlights detected in the video")
             return {
                 'status': 'success',
@@ -395,79 +188,37 @@ def detect_highlights(
                 'highlight_count': 0
             }
         
-        # Convert highlights to dict for JSON serialization
-        highlights = []
-        for h in context.highlights:
-            # Handle both Segment objects and dictionaries
-            if hasattr(h, 'start'):  # It's a Segment object
-                highlight = {
-                    'start': float(h.start),
-                    'end': float(h.end),
-                    'duration': float(h.end - h.start),
-                    'score': getattr(h, 'score', 0.0),
-                    'text': getattr(h, 'text', ''),
-                    'speaker': getattr(h, 'speaker', None),
-                    'scene_change': getattr(h, 'scene_change', False),
-                    'sentiment': getattr(h, 'sentiment', 0.0)
-                }
-            else:  # It's already a dictionary
+        # Convert highlights to serializable format
+        highlights_list = []
+        for h in highlights:
+            if isinstance(h, dict):
+                highlights_list.append(h)
+            else:
+                # Handle Segment objects
                 highlight = {
                     'start': float(h.get('start', 0)),
                     'end': float(h.get('end', 0)),
-                    'duration': float(h.get('end', 0) - h.get('start', 0)),
+                    'duration': float(h.get('duration', 0)),
                     'score': h.get('score', 0.0),
                     'text': h.get('text', ''),
-                    'speaker': h.get('speaker'),
-                    'scene_change': h.get('scene_change', False),
-                    'sentiment': h.get('sentiment', 0.0)
+                    'speaker': h.get('speaker', ''),
+                    'features': h.get('features', {})
                 }
-            highlights.append(highlight)
+                highlights_list.append(highlight)
         
-        logger.info(f"Detected {len(highlights)} highlights")
-        
-        # Visualize audio features if matplotlib is available
-        if 'matplotlib' in sys.modules and HAS_AUDIO_DEPS:
-            try:
-                plt.figure(figsize=(12, 8))
-                
-                # Plot RMS energy
-                plt.subplot(3, 1, 1)
-                plt.plot(times, features['rms'], label='RMS Energy')
-                plt.title('Audio Features')
-                plt.ylabel('Amplitude')
-                
-                # Plot spectral centroid
-                plt.subplot(3, 1, 2)
-                plt.plot(times, features['spectral_centroid'], label='Spectral Centroid', color='r')
-                plt.ylabel('Hz')
-                
-                # Plot zero-crossing rate
-                plt.subplot(3, 1, 3)
-                plt.plot(times, features['zcr'], label='Zero Crossing Rate', color='g')
-                plt.xlabel('Time (s)')
-                plt.ylabel('Rate')
-                
-                # Save the plot
-                plot_file = output_dir / 'audio_features.png'
-                plt.tight_layout()
-                plt.savefig(plot_file)
-                plt.close()
-                logger.info(f"Saved audio feature visualization to {plot_file}")
-                
-            except Exception as e:
-                logger.warning(f"Could not create audio feature visualization: {e}")
+        logger.info(f"Detected {len(highlights_list)} highlights")
         
         return {
             'status': 'success',
-            'message': f'Detected {len(highlights)} highlights',
+            'message': f'Detected {len(highlights_list)} highlights',
             'duration': float(duration),
-            'highlights': highlights,
-            'segment_count': len(context.segments) if hasattr(context, 'segments') else 0,
-            'highlight_count': len(highlights),
+            'highlights': highlights_list,
+            'segment_count': len(getattr(processed_context, 'segments', [])),
+            'highlight_count': len(highlights_list),
             'audio_features': {
                 'sample_rate': sample_rate,
                 'hop_length': hop_length,
-                'feature_count': len(features)
+                'feature_count': 0  # Placeholder
             }
         }
             
@@ -482,106 +233,6 @@ def detect_highlights(
             'highlight_count': 0,
             'error': str(e)
         }
-
-def create_highlight_video(
-    input_path: Union[str, Path],
-    segments: List[Dict[str, Any]],
-    output_path: Union[str, Path],
-    temp_dir: Optional[Union[str, Path]] = None
-) -> str:
-    """Create a highlight video from the given segments.
-    
-    Args:
-        input_path: Path to the input video file
-        segments: List of segment dictionaries with 'start' and 'end' times
-        output_path: Path to save the output highlight video
-        temp_dir: Directory for temporary files
-        
-    Returns:
-        Path to the created highlight video
-    """
-    if not segments:
-        raise ValueError("No segments provided for highlight video creation")
-    
-    input_path = Path(input_path)
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    if temp_dir is None:
-        temp_dir = Path(tempfile.mkdtemp(prefix="highlight_video_"))
-    else:
-        temp_dir = Path(temp_dir)
-        temp_dir.mkdir(parents=True, exist_ok=True)
-    
-    try:
-        # Create a list of segment files
-        segment_files = []
-        
-        for i, segment in enumerate(segments):
-            start = segment.get('start', 0)
-            end = segment.get('end', 0)
-            
-            if end <= start:
-                logger.warning(f"Invalid segment {i}: end time {end} <= start time {start}")
-                continue
-                
-            duration = end - start
-            segment_file = temp_dir / f"segment_{i:04d}.mp4"
-            
-            # Extract segment using ffmpeg
-            cmd = [
-                'ffmpeg',
-                '-y',  # Overwrite output files
-                '-ss', str(start),
-                '-i', str(input_path),
-                '-t', str(duration),
-                '-c:v', 'libx264',
-                '-c:a', 'aac',
-                '-strict', 'experimental',
-                '-b:a', '192k',
-                '-movflags', '+faststart',
-                str(segment_file)
-            ]
-            
-            try:
-                run_ffmpeg(cmd)
-                segment_files.append(segment_file)
-            except Exception as e:
-                logger.error(f"Failed to extract segment {i}: {e}")
-                continue
-        
-        if not segment_files:
-            raise ValueError("No valid segments were extracted")
-        
-        # Create a file listing all segments for concatenation
-        concat_file = temp_dir / 'concat_list.txt'
-        with open(concat_file, 'w') as f:
-            for seg_file in segment_files:
-                f.write(f"file '{seg_file.absolute()}'\n")
-        
-        # Concatenate all segments
-        concat_output = temp_dir / 'concat_output.mp4'
-        cmd = [
-            'ffmpeg',
-            '-y',
-            '-f', 'concat',
-            '-safe', '0',
-            '-i', str(concat_file),
-            '-c', 'copy',
-            str(concat_output)
-        ]
-        
-        run_ffmpeg(cmd)
-        
-        # Copy the final output to the desired location
-        shutil.copy2(concat_output, output_path)
-        
-        logger.info(f"Created highlight video at {output_path}")
-        return str(output_path)
-        
-    except Exception as e:
-        logger.error(f"Error creating highlight video: {e}")
-        raise
 
 def create_highlight_video_from_segments(
     input_path: Union[str, Path],
@@ -599,10 +250,13 @@ def create_highlight_video_from_segments(
         logger.info(f"  Segment {i}: {seg.get('start', 0):.2f}s - {seg.get('end', 0):.2f}s")
     
     # Create output directory if it doesn't exist
+    output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     # Extract and concatenate segments
     try:
+        from app.editing.utils.video_utils import extract_segments
+        
         result = extract_segments(
             input_path=input_path,
             segments=segments,
@@ -677,6 +331,7 @@ def main():
     args = parser.parse_args()
     
     # Ensure output directory exists first
+    import os
     os.makedirs(args.output_dir, exist_ok=True)
     
     # Configure logging
@@ -699,8 +354,10 @@ def main():
     logging.basicConfig(
         level=log_level,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=handlers
+        handlers=handlers,
+        force=True  # Override existing configuration
     )
+    
     input_path = Path(args.input)
     output_path = Path(args.output)
     
@@ -749,27 +406,20 @@ def main():
         if highlights:
             logger.info(f"Generating highlight reel with {len(highlights)} segments")
             
-            # Create a list of segments to include in the highlight reel
-            segments = [
-                {
-                    'start': h['start'],
-                    'end': h['end'],
-                    'file': str(input_path)
-                }
-                for h in highlights
-            ]
-            
             # Create highlight reel
-            from app.editing.utils.video_utils import create_highlight_video
-            output_video = create_highlight_video(
+            success = create_highlight_video_from_segments(
                 input_path=str(input_path),
-                highlights=highlights,
+                segments=highlights,
                 output_path=str(output_path),
                 temp_dir=temp_dir
             )
             
-            logger.info(f"Highlight reel created at: {output_video}")
-            print(f"\nSuccess! Created highlight reel at: {output_video}")
+            if success:
+                logger.info(f"Highlight reel created at: {output_path}")
+                print(f"\nSuccess! Created highlight reel at: {output_path}")
+            else:
+                logger.error("Failed to create highlight reel")
+                print("\nFailed to create highlight reel")
         else:
             logger.warning("No highlights were detected in the video.")
             print("\nNo highlights were detected in the video.")

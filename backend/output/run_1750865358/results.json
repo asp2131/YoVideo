@@ -1,0 +1,9 @@
+{
+  "status": "error",
+  "message": "Pipeline processing failed: process() got an unexpected keyword argument 'progress_callback'",
+  "duration": 0.0,
+  "highlights": [],
+  "segment_count": 0,
+  "highlight_count": 0,
+  "error": "Pipeline processing failed: process() got an unexpected keyword argument 'progress_callback'"
+}

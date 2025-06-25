@@ -10,8 +10,6 @@ from typing import List, Dict, Any, Optional, Protocol, runtime_checkable, Calla
 import logging
 import time
 from enum import Enum, auto
-from dataclasses import dataclass, field
-from typing import Dict, Any, Optional, List, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +157,10 @@ class Context:
     # Metadata and configuration
     metadata: Dict[str, Any] = field(default_factory=dict)
     
+    # Additional attributes that might be needed
+    duration: Optional[float] = None
+    output_dir: Optional[str] = None
+    
     def update_progress(self, current: Optional[int] = None, total: Optional[int] = None, 
                        status: Optional[ProcessingStatus] = None, message: Optional[str] = None,
                        **metadata):
@@ -193,7 +195,7 @@ class Context:
                     'text': s.text,
                     'speaker': s.speaker,
                     'scene_change': s.scene_change,
-                    'silence_ratio': s.silence_ratio,
+                    'silence_ratio': s.silent_ratio,
                     'sentiment': s.sentiment
                 }
                 for s in self.segments
@@ -209,7 +211,9 @@ class Context:
                 'message': self.progress.message,
                 'metadata': self.progress.metadata
             },
-            'metadata': self.metadata
+            'metadata': self.metadata,
+            'duration': self.duration,
+            'output_dir': self.output_dir
         }
     
     @classmethod
@@ -217,12 +221,12 @@ class Context:
         """Create a Context from a dictionary."""
         context = cls(
             video_path=data['video_path'],
-            segments=data.get('segments', []),
             scene_changes=data.get('scene_changes', []),
             silence_sections=data.get('silence_sections', []),
             transcription=data.get('transcription'),
-            highlights=data.get('highlights', []),
-            metadata=data.get('metadata', {})
+            metadata=data.get('metadata', {}),
+            duration=data.get('duration'),
+            output_dir=data.get('output_dir')
         )
         
         # Restore progress
@@ -244,7 +248,7 @@ class Context:
                 text=seg_data.get('text', ''),
                 speaker=seg_data.get('speaker'),
                 scene_change=seg_data.get('scene_change', False),
-                silence_ratio=seg_data.get('silence_ratio', 0.0),
+                silent_ratio=seg_data.get('silence_ratio', 0.0),
                 sentiment=seg_data.get('sentiment', 0.0)
             )
             context.segments.append(segment)
@@ -268,17 +272,22 @@ class HighlightPipeline:
     def __init__(self, stages: List[VideoProcessor]):
         """Initialize with an ordered list of processing stages."""
         self.stages = stages
+        self._cancel_token: Optional[CancellationToken] = None
     
     def cancel(self):
         """Request cancellation of the current pipeline execution."""
-        self._cancel_token.cancel()
+        if self._cancel_token:
+            self._cancel_token.cancel()
     
-    def run(self, initial_context: Context) -> Context:
-        """
-        Run the pipeline on the given initial context.
+    def run(self, initial_context: Context, 
+            progress_callback: Optional[Callable[[Progress], None]] = None,
+            cancel_token: Optional[CancellationToken] = None) -> Context:
+        """Run the pipeline on the given initial context.
         
         Args:
             initial_context: The initial context to process
+            progress_callback: Optional callback for progress updates
+            cancel_token: Optional cancellation token
             
         Returns:
             The processed context after all stages
@@ -287,13 +296,56 @@ class HighlightPipeline:
             PipelineError: If any processor fails
         """
         current_context = initial_context
+        self._cancel_token = cancel_token or current_context.cancel_token
+        
+        # Initialize progress
+        total_steps = len(self.stages)
         
         try:
-            for stage in self.stages:
-                current_context = stage.process(current_context)
+            for i, stage in enumerate(self.stages, 1):
+                # Update progress
+                if progress_callback:
+                    progress = Progress(
+                        current=i-1,
+                        total=total_steps,
+                        status=ProcessingStatus.RUNNING,
+                        message=f"Running {stage.__class__.__name__}",
+                        metadata={'processor': stage.__class__.__name__}
+                    )
+                    progress_callback(progress)
+                
+                logger.info(f"Running processor: {stage.__class__.__name__}")
+                
+                # Run the processor with progress and cancellation
+                current_context = stage.process(
+                    current_context,
+                    progress_callback=progress_callback,
+                    cancel_token=self._cancel_token
+                )
+            
+            # Mark as completed
+            if progress_callback:
+                progress = Progress(
+                    current=total_steps,
+                    total=total_steps,
+                    status=ProcessingStatus.COMPLETED,
+                    message="Processing completed successfully"
+                )
+                progress_callback(progress)
             
             return current_context
             
         except Exception as e:
             logger.error(f"Pipeline failed: {str(e)}", exc_info=True)
+            if progress_callback:
+                progress = Progress(
+                    current=0,
+                    total=total_steps,
+                    status=ProcessingStatus.FAILED,
+                    message=f"Processing failed: {str(e)}"
+                )
+                progress_callback(progress)
+            
+            if isinstance(e, PipelineError):
+                raise
             raise PipelineError(f"Pipeline processing failed: {str(e)}") from e

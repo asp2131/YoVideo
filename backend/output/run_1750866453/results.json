@@ -1,0 +1,9 @@
+{
+  "status": "error",
+  "message": "Pipeline processing failed: 'BasicSegmenter' object has no attribute 'process'",
+  "duration": 0.0,
+  "highlights": [],
+  "segment_count": 0,
+  "highlight_count": 0,
+  "error": "Pipeline processing failed: 'BasicSegmenter' object has no attribute 'process'"
+}

@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass
 import tempfile
 import shutil
+import subprocess
 
 from ..pipeline.core import (
     VideoProcessor, 
@@ -14,7 +15,6 @@ from ..pipeline.core import (
     CancellationToken, 
     ProcessingStatus
 )
-from ..utils.ffmpeg_utils import run_ffmpeg
 
 logger = logging.getLogger(__name__)
 
@@ -111,9 +111,6 @@ class SilenceRemover(VideoProcessor):
             return context
             
         except Exception as e:
-            # Clean up the temporary file if it exists
-            if output_path.exists():
-                output_path.unlink()
             error_msg = f"Silence removal failed: {str(e)}"
             logger.error(error_msg)
             
@@ -122,37 +119,90 @@ class SilenceRemover(VideoProcessor):
                 progress_callback(Progress(
                     status=ProcessingStatus.FAILED,
                     message=error_msg,
-                    progress=0.0
+                    current=0,
+                    total=3
                 ))
             
             raise PipelineError(error_msg) from e
     
-    def _apply_filter(self, input_path: Path, output_path: Path, filter_complex: str) -> None:
-        """Apply the filter complex to the input video."""
-        if not filter_complex:
-            self._copy_video(input_path, output_path)
-            return
-            
-        cmd = [
-            'ffmpeg',
-            '-i', str(input_path),
-            '-vf', filter_complex,
-            '-c:v', 'libx264',
-            '-preset', 'fast',
-            '-c:a', 'aac',
-            '-strict', 'experimental',
-            '-y',
-            str(output_path)
-        ]
-        
+    def _get_video_duration(self, video_path: str) -> float:
+        """Get video duration using ffprobe."""
         try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Error applying filter: {e.stderr}")
-            raise VideoEditingError(f"Failed to apply filter: {e.stderr}")
+            cmd = [
+                'ffprobe',
+                '-v', 'error',
+                '-show_entries', 'format=duration',
+                '-of', 'default=noprint_wrappers=1:nokey=1',
+                video_path
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            return float(result.stdout.strip())
+        except Exception as e:
+            logger.error(f"Error getting video duration: {e}")
+            return 0.0
     
-    @staticmethod
-    def _copy_video(src: Path, dst: Path) -> None:
-        """Copy a video file from src to dst."""
-        import shutil
-        shutil.copy2(src, dst)
+    def _detect_silence(self, video_path: str, cancel_token: CancellationToken) -> List[Dict[str, float]]:
+        """Detect silent sections using ffmpeg."""
+        try:
+            # Check for cancellation
+            cancel_token.check_cancelled()
+            
+            # Use ffmpeg to detect silence
+            cmd = [
+                'ffmpeg',
+                '-i', video_path,
+                '-af', f'silencedetect=noise={self.silence_threshold}dB:duration={self.silence_duration}',
+                '-f', 'null',
+                '-'
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            
+            # Parse silence sections from stderr
+            silence_sections = []
+            lines = result.stderr.split('\n')
+            
+            current_silence = None
+            for line in lines:
+                if 'silence_start:' in line:
+                    try:
+                        start_time = float(line.split('silence_start:')[1].strip())
+                        current_silence = {'start': start_time}
+                    except (ValueError, IndexError):
+                        continue
+                elif 'silence_end:' in line and current_silence:
+                    try:
+                        end_time = float(line.split('silence_end:')[1].split()[0])
+                        current_silence['end'] = end_time
+                        silence_sections.append(current_silence)
+                        current_silence = None
+                    except (ValueError, IndexError):
+                        continue
+            
+            return silence_sections
+            
+        except subprocess.CalledProcessError as e:
+            logger.error(f"FFmpeg silence detection failed: {e.stderr}")
+            return []
+        except Exception as e:
+            logger.error(f"Error detecting silence: {e}")
+            return []
+    
+    def _update_progress(
+        self,
+        progress_callback: Optional[Callable[[Progress], None]],
+        current: int,
+        total: int,
+        status: ProcessingStatus = ProcessingStatus.RUNNING,
+        message: str = ""
+    ):
+        """Update progress if callback is provided."""
+        if progress_callback:
+            progress = Progress(
+                current=current,
+                total=total,
+                status=status,
+                message=message,
+                metadata={'processor': 'SilenceRemover'}
+            )
+            progress_callback(progress)
