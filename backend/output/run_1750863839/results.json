@@ -1,0 +1,9 @@
+{
+  "status": "error",
+  "message": "'OpusClipLevelPipeline' object has no attribute 'segment_video'",
+  "duration": 0.0,
+  "highlights": [],
+  "segment_count": 0,
+  "highlight_count": 0,
+  "error": "'OpusClipLevelPipeline' object has no attribute 'segment_video'"
+}

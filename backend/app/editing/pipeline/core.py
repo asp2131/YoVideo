@@ -276,22 +276,19 @@ class HighlightPipeline:
     def run(self, initial_context: Context, 
             progress_callback: Optional[Callable[[Progress], None]] = None,
             cancel_token: Optional[CancellationToken] = None) -> Context:
-        """Execute the pipeline with the given initial context.
+        """Run the pipeline on the given initial context.
         
         Args:
-            initial_context: The initial context containing at least the video path.
+            initial_context: The initial context to process
             progress_callback: Optional callback for progress updates
-            cancel_token: Optional cancellation token
+            cancel_token: Optional cancellation token (not used in simplified version)
             
         Returns:
-            The processed context containing the final results.
+            The processed context after all stages
             
         Raises:
             PipelineError: If any processor fails
-            PipelineCancelledError: If the operation is cancelled
         """
-        # Use provided cancel token or create a new one
-        cancel_token = cancel_token or self._cancel_token
         current_context = initial_context
         
         # Initialize progress
@@ -299,9 +296,6 @@ class HighlightPipeline:
         
         try:
             for i, stage in enumerate(self.stages, 1):
-                # Check for cancellation
-                cancel_token.check_cancelled()
-                
                 # Update progress
                 if progress_callback:
                     progress = Progress(
@@ -318,12 +312,8 @@ class HighlightPipeline:
                 # Run the processor with progress and cancellation
                 current_context = stage.process(
                     current_context,
-                    progress_callback=progress_callback,
-                    cancel_token=cancel_token
+                    progress_callback=progress_callback
                 )
-                
-                # Check for cancellation between processors
-                cancel_token.check_cancelled()
             
             # Mark as completed
             if progress_callback:
@@ -336,18 +326,6 @@ class HighlightPipeline:
                 progress_callback(progress)
             
             return current_context
-            
-        except PipelineCancelledError:
-            logger.info("Pipeline execution was cancelled")
-            if progress_callback:
-                progress = Progress(
-                    current=0,
-                    total=total_steps,
-                    status=ProcessingStatus.CANCELLED,
-                    message="Processing was cancelled"
-                )
-                progress_callback(progress)
-            raise
             
         except Exception as e:
             logger.error(f"Pipeline failed: {str(e)}", exc_info=True)

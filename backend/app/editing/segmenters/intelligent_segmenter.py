@@ -11,11 +11,10 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 
 from app.editing.pipeline.core import HighlightPipeline, Context
-from app.editing.processors.silence_remover import SilenceRemover
 from app.editing.processors.scene_detector import SceneDetector
-from app.editing.segmenters.intelligent_segmenter import OpusClipLevelSegmenter
-from app.editing.processors.enhanced_highlight_detector import OpusClipLevelHighlightDetector
+from app.editing.processors.enhanced_highlight_detector import OpusClipLevelHighlightDetector as EnhancedHighlightDetector
 from app.editing.analyzers import get_analyzer
+from app.editing.segmenters.basic import BasicSegmenter
 
 logger = logging.getLogger(__name__)
 
@@ -87,25 +86,17 @@ class OpusClipLevelPipeline:
     def create_pipeline(self) -> HighlightPipeline:
         """Create the complete processing pipeline."""
         # Create processors with optimized settings
-        silence_remover = SilenceRemover(
-            silence_threshold=-32.0,  # Slightly more sensitive
-            silence_duration=0.8  # Detect shorter silences
-        )
-        
         scene_detector = SceneDetector(
             threshold=25.0,  # More sensitive scene detection
             min_scene_len=1.5
         )
         
-        intelligent_segmenter = OpusClipLevelSegmenter(
+        segmenter = BasicSegmenter(
             min_segment_duration=self.config.min_segment_duration,
-            max_segment_duration=self.config.max_segment_duration,
-            semantic_threshold=self.config.semantic_threshold,
-            use_advanced_nlp=self.config.use_advanced_nlp,
-            adaptive_thresholds=self.config.adapt_to_content_type
+            max_segment_duration=self.config.max_segment_duration
         )
         
-        highlight_detector = OpusClipLevelHighlightDetector(
+        highlight_detector = EnhancedHighlightDetector(
             min_duration=self.config.min_highlight_duration,
             max_duration=self.config.max_highlight_duration,
             target_total_duration=self.config.target_total_duration,
@@ -113,20 +104,15 @@ class OpusClipLevelPipeline:
             visual_weight=self.config.visual_weight,
             content_weight=self.config.content_weight,
             engagement_weight=self.config.engagement_weight,
-            diversity_lambda=self.config.diversity_lambda,
-            quality_threshold=self.config.quality_threshold,
-            max_highlights=self.config.max_highlights
+            quality_threshold=self.config.quality_threshold
         )
         
         # Create pipeline
-        self.pipeline = HighlightPipeline([
-            silence_remover,
+        return HighlightPipeline([
             scene_detector,
-            intelligent_segmenter,
+            segmenter,
             highlight_detector
         ])
-        
-        return self.pipeline
     
     async def process_video_to_opus_clip_quality(
         self,
@@ -165,7 +151,7 @@ class OpusClipLevelPipeline:
             
             # Create and run pipeline
             if not self.pipeline:
-                self.create_pipeline()
+                self.pipeline = self.create_pipeline()
             
             logger.info("Running OpusClip-level processing pipeline...")
             processed_context = self.pipeline.run(context)
@@ -476,6 +462,9 @@ async def main():
         print(f"  Time: {highlight['start']:.1f}s - {highlight['end']:.1f}s")
         print(f"  Score: {highlight['score']:.3f}")
         print(f"  Text: {highlight['text'][:100]}...")
+
+# Alias for backward compatibility
+IntelligentSegmenter = OpusClipLevelPipeline
 
 if __name__ == "__main__":
     asyncio.run(main())

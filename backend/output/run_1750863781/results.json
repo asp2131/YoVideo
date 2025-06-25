@@ -1,0 +1,9 @@
+{
+  "status": "error",
+  "message": "__init__() got an unexpected keyword argument 'min_segment_duration'",
+  "duration": 0.0,
+  "highlights": [],
+  "segment_count": 0,
+  "highlight_count": 0,
+  "error": "__init__() got an unexpected keyword argument 'min_segment_duration'"
+}

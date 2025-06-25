@@ -1,9 +1,0 @@
-{
-  "status": "error",
-  "message": "Highlight detection failed: name 'position_ratio' is not defined",
-  "duration": 0.0,
-  "highlights": [],
-  "segment_count": 0,
-  "highlight_count": 0,
-  "error": "Highlight detection failed: name 'position_ratio' is not defined"
-}

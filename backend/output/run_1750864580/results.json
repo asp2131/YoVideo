@@ -1,0 +1,9 @@
+{
+  "status": "error",
+  "message": "'HighlightPipeline' object has no attribute '_cancel_token'",
+  "duration": 0.0,
+  "highlights": [],
+  "segment_count": 0,
+  "highlight_count": 0,
+  "error": "'HighlightPipeline' object has no attribute '_cancel_token'"
+}

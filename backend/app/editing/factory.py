@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 from .processors.silence_remover import SilenceRemover
 from .processors.scene_detector import SceneDetector
 from .processors.highlight_detector import HighlightDetector
-from .processors.enhanced_highlight_detector import EnhancedHighlightDetector
-from .segmenters.intelligent_segmenter import IntelligentSegmenter
+from .processors.enhanced_highlight_detector import OpusClipLevelHighlightDetector as EnhancedHighlightDetector
+from .segmenters import IntelligentSegmenter
 
 # Register all processors
 register_processor('silence_remover', SilenceRemover)

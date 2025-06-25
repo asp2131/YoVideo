@@ -1,0 +1,9 @@
+{
+  "status": "error",
+  "message": "Pipeline processing failed: name 'output_path' is not defined",
+  "duration": 0.0,
+  "highlights": [],
+  "segment_count": 0,
+  "highlight_count": 0,
+  "error": "Pipeline processing failed: name 'output_path' is not defined"
+}

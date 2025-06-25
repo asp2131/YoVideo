@@ -7,7 +7,7 @@ Each processor implements the VideoProcessor interface and performs a specific t
 
 from .scene_detector import SceneDetector
 from .silence_remover import SilenceRemover
-from .enhanced_highlight_detector import EnhancedHighlightDetector, HighlightScore
+from .enhanced_highlight_detector import OpusClipLevelHighlightDetector as EnhancedHighlightDetector, HighlightScore
 from .highlight_detector import HighlightDetector
 from .diversity_processor import DiversityProcessor
 

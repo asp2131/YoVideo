@@ -29,7 +29,7 @@ except ImportError:
 
 # Import local modules
 from app.editing.pipeline.core import Context, Segment
-from app.editing.processors.enhanced_highlight_detector import EnhancedHighlightDetector
+from app.editing.processors.enhanced_highlight_detector import OpusClipLevelHighlightDetector as EnhancedHighlightDetector
 from app.editing.segmenters.intelligent_segmenter import IntelligentSegmenter
 from app.editing.utils.ffmpeg_utils import run_ffmpeg
 from app.editing.utils.video_utils import extract_audio, get_video_info
@@ -215,6 +215,17 @@ def plot_audio_features(audio_features: Dict[str, np.ndarray], output_path: str)
     plt.close()
     logger.info(f"Saved audio feature visualization to {output_path}")
 
+async def _process_video_async(
+    pipeline: Any,
+    input_path: str,
+    output_dir: Optional[str] = None
+) -> Dict[str, Any]:
+    """Helper function to run the async video processing."""
+    return await pipeline.process_video_to_opus_clip_quality(
+        video_path=input_path,
+        output_dir=output_dir
+    )
+
 def detect_highlights(
     input_path: Union[str, Path],
     output_dir: Optional[Union[str, Path]] = None,
@@ -310,53 +321,47 @@ def detect_highlights(
         context.feature_times = times
         context.audio_features = features
         
-        # Create segments using IntelligentSegmenter
-        logger.info("Creating segments using IntelligentSegmenter")
-        segmenter = IntelligentSegmenter(
+        # Create segments using OpusClipLevelPipeline
+        logger.info("Creating segments using OpusClipLevelPipeline")
+        
+        # Create a configuration object
+        from app.editing.segmenters.intelligent_segmenter import OpusClipConfig
+        config = OpusClipConfig(
             min_segment_duration=min_duration,
             max_segment_duration=max_duration,
-            semantic_threshold=0.3,
-            speaker_change_weight=0.4,
-            topic_change_weight=0.6,
-            use_scene_boundaries=True,
-            respect_silence=True,
-            pause_threshold=1.0,
-            min_silence_len=0.5
+            target_total_duration=target_duration,
+            min_highlight_duration=min_duration,
+            max_highlight_duration=max_duration,
+            quality_threshold=0.3
         )
         
-        # Create a dummy transcription for segmentation
-        # In a real scenario, this would come from ASR
-        dummy_transcription = [
-            {
-                'start': 0,
-                'end': video_info['duration'],
-                'text': 'Dummy transcription for segmentation',
-                'speaker': 'speaker_1'
-            }
-        ]
+        # Initialize the pipeline with the config
+        pipeline = IntelligentSegmenter(config=config)
         
-        # Generate segments
-        segments = segmenter.segment_video(
-            transcription=dummy_transcription,
-            video_duration=video_info['duration'],
-            audio_features=features
-        )
+        # Process the video to get highlights using asyncio.run()
+        logger.info("Processing video to extract highlights...")
+        import asyncio
+        results = asyncio.run(_process_video_async(
+            pipeline=pipeline,
+            input_path=str(input_path),
+            output_dir=str(output_dir) if output_dir else None
+        ))
         
-        # Convert segment dictionaries to Segment objects
+        # Convert the results to segments
         context.segments = [
             Segment(
                 start=seg['start'],
                 end=seg['end'],
-                text=seg.get('text'),
-                speaker=seg.get('speaker'),
+                text=seg.get('text', ''),
+                speaker=seg.get('speaker', ''),
                 scene_change=seg.get('scene_change', False),
                 silent_ratio=seg.get('silence_ratio', 0.0),
                 word_count=len(seg.get('text', '').split()) if seg.get('text') else 0,
-                audio_peaks=0.0,  # Will be updated by the audio analyzer
-                visual_motion=0.0,  # Will be updated by the visual analyzer
+                audio_peaks=seg.get('audio_peaks', 0.0),
+                visual_motion=seg.get('visual_motion', 0.0),
                 sentiment=seg.get('sentiment', 0.0)
             )
-            for seg in segments
+            for seg in results.get('segments', [])
         ]
         
         logger.info(f"Created {len(context.segments)} segments")
