@@ -1,9 +1,17 @@
 // hooks/use-chunked-upload.ts
 import { useState, useCallback } from 'react'
 
+interface ProcessingOptions {
+  enableIntelligentEditing: boolean
+  editingStyle: 'engaging' | 'professional' | 'educational' | 'social_media'
+  targetDuration: number
+  contentType: 'general' | 'tutorial' | 'interview' | 'presentation' | 'vlog'
+}
+
 interface ChunkedUploadOptions {
   chunkSize?: number
   maxRetries?: number
+  processingOptions?: ProcessingOptions
   onProgress?: (progress: number) => void
   onChunkProgress?: (chunkIndex: number, totalChunks: number) => void
 }
@@ -30,6 +38,12 @@ export const useChunkedUpload = () => {
     const {
       chunkSize = 5 * 1024 * 1024, // 5MB chunks
       maxRetries = 3,
+      processingOptions = {
+        enableIntelligentEditing: false,
+        editingStyle: 'engaging',
+        targetDuration: 60,
+        contentType: 'general'
+      },
       onProgress,
       onChunkProgress
     } = options
@@ -42,7 +56,7 @@ export const useChunkedUpload = () => {
       const totalChunks = Math.ceil(file.size / chunkSize)
       const uploadId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       
-      // Initialize multipart upload
+      // Initialize multipart upload with processing options
       const initResponse = await fetch('/api/v1/upload/init', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -52,12 +66,14 @@ export const useChunkedUpload = () => {
           fileType: file.type,
           projectName,
           totalChunks,
-          uploadId
+          uploadId,
+          processingOptions
         })
       })
 
       if (!initResponse.ok) {
-        throw new Error('Failed to initialize upload')
+        const errorData = await initResponse.json().catch(() => ({}))
+        throw new Error(errorData.detail || 'Failed to initialize upload')
       }
 
       const { projectId } = await initResponse.json()
@@ -93,7 +109,8 @@ export const useChunkedUpload = () => {
             })
 
             if (!chunkResponse.ok) {
-              throw new Error(`Chunk ${chunkIndex} upload failed`)
+              const errorData = await chunkResponse.json().catch(() => ({}))
+              throw new Error(errorData.detail || `Chunk ${chunkIndex} upload failed`)
             }
 
             const { etag } = await chunkResponse.json()
@@ -109,7 +126,7 @@ export const useChunkedUpload = () => {
           } catch (chunkError) {
             retries++
             if (retries >= maxRetries) {
-              throw new Error(`Failed to upload chunk ${chunkIndex} after ${maxRetries} retries`)
+              throw new Error(`Failed to upload chunk ${chunkIndex} after ${maxRetries} retries: ${chunkError instanceof Error ? chunkError.message : 'Unknown error'}`)
             }
             // Wait before retry with exponential backoff
             await new Promise(resolve => setTimeout(resolve, Math.pow(2, retries) * 1000))
@@ -129,22 +146,31 @@ export const useChunkedUpload = () => {
       })
 
       if (!completeResponse.ok) {
-        throw new Error('Failed to complete upload')
+        const errorData = await completeResponse.json().catch(() => ({}))
+        throw new Error(errorData.detail || 'Failed to complete upload')
       }
 
       const result = await completeResponse.json()
       
-      // Start transcription
-      await fetch('/api/v1/transcribe', {
+      // Start transcription with processing options
+      const transcribeResponse = await fetch('/api/v1/transcribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: projectId })
+        body: JSON.stringify({ 
+          project_id: projectId,
+          processing_options: processingOptions
+        })
       })
+
+      if (!transcribeResponse.ok) {
+        console.warn('Failed to start transcription automatically')
+      }
 
       return result
 
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : 'Upload failed')
+      const errorMessage = uploadError instanceof Error ? uploadError.message : 'Upload failed'
+      setError(errorMessage)
       throw uploadError
     } finally {
       setIsUploading(false)

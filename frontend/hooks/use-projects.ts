@@ -1,5 +1,13 @@
+// hooks/use-projects.ts (updated)
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
+
+export interface ProcessingOptions {
+  enable_intelligent_editing?: boolean
+  editing_style?: 'engaging' | 'professional' | 'educational' | 'social_media'
+  target_duration?: number
+  content_type?: 'general' | 'tutorial' | 'interview' | 'presentation' | 'vlog'
+}
 
 export interface Project {
   id: string
@@ -8,7 +16,10 @@ export interface Project {
   status: string
   transcription?: any
   processed_video_path?: string
+  processing_options?: ProcessingOptions
   created_at: string
+  original_filename?: string
+  video_path?: string
 }
 
 interface ProjectsResponse {
@@ -22,6 +33,7 @@ export const useProjects = () => {
       const response = await axios.get('/api/v1/projects')
       return response.data
     },
+    refetchInterval: 5000, // Poll every 5 seconds for status updates
   })
 }
 
@@ -72,6 +84,31 @@ export const useUploadProject = () => {
         project_id: response.data.project_id
       })
 
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+    },
+  })
+}
+
+export const useReprocessProject = () => {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: async ({ 
+      projectId, 
+      processingOptions 
+    }: { 
+      projectId: string
+      processingOptions: {
+        enableIntelligentEditing: boolean
+        editingStyle: 'engaging' | 'professional' | 'educational' | 'social_media'
+        targetDuration: number
+        contentType: 'general' | 'tutorial' | 'interview' | 'presentation' | 'vlog'
+      }
+    }) => {
+      const response = await axios.post(`/api/v1/projects/${projectId}/process`, processingOptions)
       return response.data
     },
     onSuccess: () => {

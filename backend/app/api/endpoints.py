@@ -12,7 +12,8 @@ import tempfile
 import asyncio
 import json
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional, Union, Literal
+from pydantic import Field
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,10 +24,15 @@ UPLOAD_TEMP_DIR = Path(__file__).parent.parent / "temp_uploads"
 UPLOAD_TEMP_DIR.mkdir(parents=True, exist_ok=True)
 logger.info(f"Using upload temp directory: {UPLOAD_TEMP_DIR}")
 
+# CREATE THE ROUTER - This is what was missing!
 router = APIRouter()
 
-class TranscriptionRequest(BaseModel):
-    project_id: str
+# Add new models for processing options
+class ProcessingOptions(BaseModel):
+    enableIntelligentEditing: bool = False
+    editingStyle: Literal['engaging', 'professional', 'educational', 'social_media'] = 'engaging'
+    targetDuration: int = Field(default=60, ge=30, le=300)  # 30 seconds to 5 minutes
+    contentType: Literal['general', 'tutorial', 'interview', 'presentation', 'vlog'] = 'general'
 
 class UploadInitRequest(BaseModel):
     fileName: str
@@ -35,6 +41,7 @@ class UploadInitRequest(BaseModel):
     projectName: str
     totalChunks: int
     uploadId: str
+    processingOptions: Optional[ProcessingOptions] = None
 
 class ChunkMetadata(BaseModel):
     chunkIndex: int
@@ -50,6 +57,42 @@ class UploadCompleteRequest(BaseModel):
     uploadId: str
     projectId: str
     chunks: List[str]
+
+class TranscriptionRequest(BaseModel):
+    project_id: str
+    processing_options: Optional[ProcessingOptions] = None
+
+# Upload session management
+upload_sessions: Dict[str, Dict] = {}
+
+class UploadSession:
+    def __init__(self, upload_id: str, project_id: str, file_name: str, file_size: int, 
+                 file_type: str, total_chunks: int, temp_dir: str):
+        self.upload_id = upload_id
+        self.project_id = project_id
+        self.file_name = file_name
+        self.file_size = file_size
+        self.file_type = file_type
+        self.total_chunks = total_chunks
+        self.temp_dir = temp_dir
+        self.uploaded_chunks: Dict[int, str] = {}  # chunk_index -> file_path
+        self.completed = False
+        
+    def add_chunk(self, chunk_index: int, file_path: str):
+        self.uploaded_chunks[chunk_index] = file_path
+        
+    def is_complete(self) -> bool:
+        return len(self.uploaded_chunks) == self.total_chunks
+        
+    def get_chunk_paths(self) -> List[str]:
+        """Get chunk file paths in order"""
+        paths = []
+        for i in range(self.total_chunks):
+            if i in self.uploaded_chunks:
+                paths.append(self.uploaded_chunks[i])
+            else:
+                raise ValueError(f"Missing chunk {i}")
+        return paths
 
 @router.post("/transcribe")
 async def start_transcription(request: TranscriptionRequest):
@@ -92,38 +135,6 @@ async def start_transcription(request: TranscriptionRequest):
 
 # Chunk size for file uploads (5MB chunks)
 CHUNK_SIZE = 5 * 1024 * 1024  # 5MB
-
-# In-memory storage for upload sessions
-upload_sessions: Dict[str, Dict] = {}
-
-class UploadSession:
-    def __init__(self, upload_id: str, project_id: str, file_name: str, file_size: int, 
-                 file_type: str, total_chunks: int, temp_dir: str):
-        self.upload_id = upload_id
-        self.project_id = project_id
-        self.file_name = file_name
-        self.file_size = file_size
-        self.file_type = file_type
-        self.total_chunks = total_chunks
-        self.temp_dir = temp_dir
-        self.uploaded_chunks: Dict[int, str] = {}  # chunk_index -> file_path
-        self.completed = False
-        
-    def add_chunk(self, chunk_index: int, file_path: str):
-        self.uploaded_chunks[chunk_index] = file_path
-        
-    def is_complete(self) -> bool:
-        return len(self.uploaded_chunks) == self.total_chunks
-        
-    def get_chunk_paths(self) -> List[str]:
-        """Get chunk file paths in order"""
-        paths = []
-        for i in range(self.total_chunks):
-            if i in self.uploaded_chunks:
-                paths.append(self.uploaded_chunks[i])
-            else:
-                raise ValueError(f"Missing chunk {i}")
-        return paths
 
 async def upload_to_r2_with_timeout(file_path: str, storage_filename: str, content_type: str, timeout: int = 300):
     """Upload file to Cloudflare R2 with timeout handling."""
@@ -201,7 +212,7 @@ async def upload_video(
                 temp_file_path = temp_file.name
                 logger.info(f"Successfully saved {total_size} bytes to temporary file: {temp_file_path}")
                 
-                # Upload to Supabase Storage with retry logic
+                # Upload to R2 Storage with retry logic
                 max_retries = 3
                 last_error = None
                 
@@ -426,7 +437,7 @@ async def upload_chunk(
 @router.post("/upload/complete")
 async def complete_chunked_upload(request: UploadCompleteRequest):
     """
-    Complete a chunked upload by assembling chunks and uploading to Supabase.
+    Complete a chunked upload by assembling chunks and uploading to R2.
     """
     try:
         # Get upload session
@@ -560,75 +571,6 @@ async def complete_chunked_upload(request: UploadCompleteRequest):
             detail=f"Failed to complete upload: {str(e)}"
         )
 
-@router.get("/upload/{upload_id}/status")
-async def get_upload_status(upload_id: str):
-    """
-    Get the status of a chunked upload session.
-    """
-    if upload_id not in upload_sessions:
-        raise HTTPException(
-            status_code=404,
-            detail="Upload session not found"
-        )
-    
-    session = upload_sessions[upload_id]
-    
-    return {
-        "uploadId": upload_id,
-        "projectId": session.project_id,
-        "fileName": session.file_name,
-        "fileSize": session.file_size,
-        "totalChunks": session.total_chunks,
-        "uploadedChunks": len(session.uploaded_chunks),
-        "completed": session.completed,
-        "isComplete": session.is_complete(),
-        "progress": (len(session.uploaded_chunks) / session.total_chunks) * 100
-    }
-
-@router.delete("/upload/{upload_id}")
-async def cancel_chunked_upload(upload_id: str):
-    """
-    Cancel a chunked upload and clean up resources.
-    """
-    try:
-        if upload_id not in upload_sessions:
-            raise HTTPException(
-                status_code=404,
-                detail="Upload session not found"
-            )
-        
-        session = upload_sessions[upload_id]
-        
-        # Clean up temporary files
-        try:
-            import shutil
-            shutil.rmtree(session.temp_dir, ignore_errors=True)
-        except Exception as cleanup_error:
-            logger.error(f"Error cleaning up temp directory: {str(cleanup_error)}")
-        
-        # Remove project from database if not completed
-        if not session.completed:
-            try:
-                supabase.table("projects").delete().eq("id", session.project_id).execute()
-            except Exception as db_error:
-                logger.error(f"Error removing project from database: {str(db_error)}")
-        
-        # Remove session
-        del upload_sessions[upload_id]
-        
-        logger.info(f"Cancelled upload session {upload_id}")
-        
-        return {"message": "Upload cancelled successfully"}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to cancel upload: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to cancel upload: {str(e)}"
-        )
-
 @router.get("/projects")
 async def list_projects():
     """List all projects."""
@@ -684,7 +626,9 @@ async def delete_project(project_id: str):
         
         # Delete from storage (ignore errors if file doesn't exist)
         try:
-            supabase.storage.from_("videos").remove([video_path])
+            client = get_r2_client()
+            if client:
+                client.delete_file(video_path)
         except:
             pass  # File might not exist, continue with database cleanup
         
@@ -751,10 +695,8 @@ async def download_video(project_id: str, processed: bool = False):
             video_path = project.get("processed_video_path")
             if not video_path:
                 raise HTTPException(status_code=404, detail="Processed video not available. Please wait for processing to complete.")
-            filename_suffix = "_with_captions"
         else:
             video_path = project["video_path"]
-            filename_suffix = "_original"
         
         try:
             # Download from R2 Storage
