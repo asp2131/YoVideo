@@ -229,64 +229,49 @@ async def process_intelligent_editing(
     processing_options: dict
 ) -> str:
     """
-    Process video with intelligent editing using the editing pipeline.
+    Process video with intelligent editing using the OpusClipLevelPipeline.
     """
     try:
-        # Import the editing pipeline
-        from app.editing.factory import create_enhanced_pipeline_for_project
+        logger.info(f"🤖 Starting intelligent editing for project {project_id}")
         
-        # Convert processing options to editing preferences
-        editing_preferences = {
-            'style': processing_options.get('editing_style', 'engaging'),
-            'target_duration': processing_options.get('target_duration', 60),
-            'content_type': processing_options.get('content_type', 'general'),
-            'preserve_speech': True,
-            'enhance_audio': True,
-            'detect_faces': True
-        }
+        # Import the editing pipeline components
+        from app.editing.segmenters.intelligent_segmenter import OpusClipLevelPipeline, create_opus_clip_config
         
-        logger.info(f"🎨 Creating enhanced pipeline with preferences: {editing_preferences}")
+        # Create optimized config based on processing options
+        content_type = processing_options.get('content_type', 'general')
+        target_duration = processing_options.get('target_duration', 60)
+        editing_style = processing_options.get('editing_style', 'engaging')
         
-        # Create enhanced pipeline
-        pipeline = create_enhanced_pipeline_for_project(
-            project_id=project_id,
-            transcription=transcription_segments,
-            editing_preferences=editing_preferences
+        config = create_opus_clip_config(
+            content_type=content_type,
+            target_duration=float(target_duration),
+            quality_level='high'
         )
         
-        # Create context for processing
-        from app.editing.pipeline.core import Context
-        context = Context(
+        # Create pipeline
+        pipeline = OpusClipLevelPipeline(config)
+        
+        # Process video with intelligent editing
+        results = await pipeline.process_video_to_opus_clip_quality(
             video_path=input_video_path,
-            metadata={
-                'project_id': project_id,
-                'processing_options': processing_options
-            }
+            transcription=transcription_segments,
+            output_dir=None  # We'll handle upload separately
         )
         
-        # Add transcription to context
-        context.transcription = transcription_segments
-        
-        # Run the pipeline
-        logger.info("🚀 Running intelligent editing pipeline...")
-        processed_context = pipeline.run(context)
-        
-        # Extract highlights
-        highlights = getattr(processed_context, 'highlights', [])
-        logger.info(f"🎯 Generated {len(highlights)} highlights")
-        
-        if not highlights:
-            logger.warning("⚠️ No highlights generated, falling back to caption overlay")
+        if not results.get('success', False):
+            error_msg = results.get('error', 'Unknown error')
+            logger.error(f"❌ Intelligent editing failed: {error_msg}")
             return None
         
-        # Log highlight details
-        total_highlight_duration = sum(h.get('duration', 0) for h in highlights)
-        logger.info(f"📊 Total highlight duration: {total_highlight_duration:.1f}s")
-        for i, highlight in enumerate(highlights[:3]):  # Log first 3 highlights
-            logger.info(f"  🎬 Highlight {i+1}: {highlight.get('start', 0):.1f}s - {highlight.get('end', 0):.1f}s (score: {highlight.get('score', 0):.2f})")
+        highlights = results.get('highlights', [])
+        logger.info(f"🎯 Generated {len(highlights)} intelligent highlights")
         
-        # Create highlight video with captions
-        highlight_video_path = await create_highlight_video_with_captions(
+        if not highlights:
+            logger.warning("⚠️ No highlights generated from intelligent editing")
+            return None
+        
+        # Create highlight video with precise segment extraction
+        highlight_video_path = await create_precise_highlight_video(
             project_id,
             input_video_path,
             highlights,
@@ -297,8 +282,199 @@ async def process_intelligent_editing(
         
     except Exception as e:
         logger.error(f"❌ Intelligent editing failed for project {project_id}: {str(e)}", exc_info=True)
-        logger.info("🔄 Falling back to caption overlay")
         return None
+
+
+async def create_precise_highlight_video(
+    project_id: str,
+    input_video_path: str,
+    highlights: list,
+    transcription_segments: list
+) -> str:
+    """
+    Create highlight video with precise segment extraction and captions.
+    """
+    temp_segments = []
+    ass_file_path = None
+    concat_list_path = None
+    output_video_path = None
+    
+    try:
+        logger.info(f"🎬 Creating precise highlight video with {len(highlights)} segments")
+        
+        # Sort highlights by start time
+        sorted_highlights = sorted(highlights, key=lambda h: h.get('start', 0))
+        
+        # Extract each highlight segment with precise timing
+        for i, highlight in enumerate(sorted_highlights):
+            start = highlight.get('start', 0)
+            end = highlight.get('end', 0)
+            duration = end - start
+            
+            if duration <= 0:
+                logger.warning(f"Skipping invalid highlight {i}: start={start}, end={end}")
+                continue
+            
+            # Create temporary file for this segment
+            with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as temp_file:
+                temp_segment_path = temp_file.name
+                temp_segments.append(temp_segment_path)
+            
+            # Use precise FFmpeg extraction with re-encoding for accuracy
+            ffmpeg_cmd = [
+                'ffmpeg',
+                '-ss', str(start),  # Seek to start time
+                '-i', input_video_path,  # Input file
+                '-t', str(duration),  # Duration
+                '-c:v', 'libx264',  # Re-encode video for precision
+                '-c:a', 'aac',  # Re-encode audio
+                '-preset', 'fast',  # Fast encoding preset
+                '-crf', '23',  # Good quality
+                '-avoid_negative_ts', 'make_zero',  # Fix timestamp issues
+                '-y',  # Overwrite output
+                temp_segment_path
+            ]
+            
+            logger.info(f"📹 Extracting segment {i+1}/{len(sorted_highlights)}: {start:.2f}s - {end:.2f}s")
+            result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, check=True)
+            
+            if not os.path.exists(temp_segment_path) or os.path.getsize(temp_segment_path) == 0:
+                logger.error(f"❌ Failed to create segment {i}: {temp_segment_path}")
+                continue
+                
+            logger.info(f"✅ Created segment {i+1}: {os.path.basename(temp_segment_path)}")
+        
+        if not temp_segments:
+            raise Exception("No valid segments were created")
+        
+        # Create concatenation list
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as concat_file:
+            concat_list_path = concat_file.name
+            for segment_path in temp_segments:
+                concat_file.write(f"file '{os.path.abspath(segment_path)}'\n")
+        
+        # Create output video file
+        with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as output_file:
+            output_video_path = output_file.name
+        
+        # Concatenate segments
+        concat_cmd = [
+            'ffmpeg',
+            '-f', 'concat',
+            '-safe', '0',
+            '-i', concat_list_path,
+            '-c', 'copy',  # Copy streams without re-encoding
+            '-y',
+            output_video_path
+        ]
+        
+        logger.info("🔗 Concatenating highlight segments...")
+        result = subprocess.run(concat_cmd, capture_output=True, text=True, check=True)
+        
+        # Create captions for highlights
+        highlight_segments = []
+        current_time = 0.0
+        
+        for highlight in sorted_highlights:
+            start = highlight.get('start', 0)
+            end = highlight.get('end', 0)
+            
+            # Find matching transcription segments and adjust timing
+            for seg in transcription_segments:
+                seg_start = seg.get('start', 0)
+                seg_end = seg.get('end', 0)
+                
+                # Check if segment overlaps with highlight
+                if seg_start < end and seg_end > start:
+                    # Adjust timing to be relative to concatenated video
+                    adjusted_segment = seg.copy()
+                    overlap_start = max(seg_start, start)
+                    overlap_end = min(seg_end, end)
+                    
+                    # Calculate position in concatenated video
+                    segment_offset = overlap_start - start
+                    adjusted_segment['start'] = current_time + segment_offset
+                    adjusted_segment['end'] = current_time + (overlap_end - start)
+                    
+                    highlight_segments.append(adjusted_segment)
+            
+            current_time += (end - start)
+        
+        logger.info(f"📝 Created {len(highlight_segments)} caption segments for highlights")
+        
+        # Add captions if we have transcription
+        if highlight_segments:
+            from app.services.enhanced_caption_service import create_professional_captions
+            ass_content = create_professional_captions(highlight_segments)
+            
+            if ass_content:
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.ass', delete=False) as ass_file:
+                    ass_file.write(ass_content)
+                    ass_file.flush()
+                    ass_file_path = ass_file.name
+                
+                # Create final video with captions
+                final_output_path = output_video_path + '_with_captions.mp4'
+                
+                caption_cmd = [
+                    'ffmpeg',
+                    '-i', output_video_path,
+                    '-vf', f"ass={ass_file_path}",
+                    '-c:a', 'copy',
+                    '-c:v', 'libx264',
+                    '-preset', 'medium',
+                    '-crf', '23',
+                    '-y',
+                    final_output_path
+                ]
+                
+                logger.info("🎨 Adding captions to highlight video...")
+                result = subprocess.run(caption_cmd, capture_output=True, text=True, check=True)
+                output_video_path = final_output_path
+        
+        # Upload to R2
+        processed_filename = f"processed_{project_id}.mp4"
+        client = get_r2_client()
+        
+        logger.info(f"☁️ Uploading highlight video to R2: {processed_filename}")
+        upload_result = client.upload_file(
+            output_video_path,
+            processed_filename,
+            "video/mp4"
+        )
+        
+        if not upload_result.get('success'):
+            raise Exception(f"Upload failed: {upload_result}")
+        
+        # Update project with processed video path
+        supabase.table("projects").update({
+            "processed_video_path": processed_filename
+        }).eq("id", project_id).execute()
+        
+        logger.info(f"🎉 Intelligent highlight video uploaded: {processed_filename}")
+        return processed_filename
+        
+    except subprocess.CalledProcessError as e:
+        logger.error(f"❌ FFmpeg command failed: {e.stderr}")
+        raise Exception(f"Video processing failed: {e.stderr}")
+    except Exception as e:
+        logger.error(f"❌ Failed to create precise highlight video: {str(e)}", exc_info=True)
+        raise
+    finally:
+        # Clean up temporary files
+        for temp_file in temp_segments:
+            if temp_file and os.path.exists(temp_file):
+                try:
+                    os.unlink(temp_file)
+                except Exception as cleanup_error:
+                    logger.warning(f"⚠️ Failed to cleanup {temp_file}: {cleanup_error}")
+        
+        for cleanup_file in [ass_file_path, concat_list_path, output_video_path]:
+            if cleanup_file and os.path.exists(cleanup_file):
+                try:
+                    os.unlink(cleanup_file)
+                except Exception as cleanup_error:
+                    logger.warning(f"⚠️ Failed to cleanup {cleanup_file}: {cleanup_error}")
 
 
 async def create_highlight_video_with_captions(
