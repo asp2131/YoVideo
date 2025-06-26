@@ -1,4 +1,4 @@
-# backend/app/tasks/transcription.py (updated version)
+# backend/app/tasks/transcription.py (fixed version)
 
 import os
 import tempfile
@@ -35,17 +35,25 @@ def transcribe_video_task(self, project_id: str, processing_options: dict = None
             'content_type': 'general'
         }
     
-    enable_editing = processing_options.get('enable_intelligent_editing', False)
-    logger.info(f"Intelligent editing: {'enabled' if enable_editing else 'disabled'}")
+    # Handle both camelCase (frontend) and snake_case (backend)
+    enable_editing = (
+        processing_options.get('enable_intelligent_editing', False) or 
+        processing_options.get('enableIntelligentEditing', False)
+    )
+    
+    logger.info(f"🎬 Processing options: {processing_options}")
+    logger.info(f"🤖 Intelligent editing: {'ENABLED' if enable_editing else 'DISABLED'}")
 
     try:
         # 1. Get video path from the projects table
-        project_response = supabase.table("projects").select("video_path").eq("id", project_id).execute()
+        project_response = supabase.table("projects").select("video_path, name").eq("id", project_id).execute()
         
         if not project_response.data or len(project_response.data) == 0:
             raise ValueError(f"No project found with id {project_id}")
             
-        video_path = project_response.data[0].get("video_path")
+        project_data = project_response.data[0]
+        video_path = project_data.get("video_path")
+        project_name = project_data.get("name", "video")
 
         if not video_path:
             raise ValueError(f"No video_path found for project {project_id}")
@@ -54,7 +62,7 @@ def transcribe_video_task(self, project_id: str, processing_options: dict = None
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(video_path)[1]) as tmp_video_file:
             tmp_video_file_path = tmp_video_file.name
             
-        logger.info(f"Downloading {video_path} from R2 Storage...")
+        logger.info(f"📥 Downloading {video_path} from R2 Storage...")
         
         client = get_r2_client()
         if client is None:
@@ -62,25 +70,25 @@ def transcribe_video_task(self, project_id: str, processing_options: dict = None
             
         try:
             client.download_file(video_path, tmp_video_file_path)
-            logger.info(f"Video downloaded to {tmp_video_file_path}")
+            logger.info(f"✅ Video downloaded to {tmp_video_file_path}")
         except Exception as e:
-            logger.error(f"Failed to download video from R2: {str(e)}")
+            logger.error(f"❌ Failed to download video from R2: {str(e)}")
             raise Exception(f"Failed to download video: {str(e)}")
             
         # Validate video file
         file_size = os.path.getsize(tmp_video_file_path)
-        logger.info(f"Video file size: {file_size} bytes")
+        logger.info(f"📁 Video file size: {file_size} bytes")
         
         if file_size == 0:
             raise Exception("Downloaded video file is empty")
 
-        # 3. Transcribe the video file
-        logger.info(f"Starting transcription for {tmp_video_file_path}...")
-        
-        # Update project status to processing
+        # 3. Update project status to processing
         supabase.table("projects").update({
             "status": "processing"
         }).eq("id", project_id).execute()
+
+        # 4. Transcribe the video file
+        logger.info(f"🎙️ Starting transcription for {tmp_video_file_path}...")
         
         try:
             # Run whisper via subprocess
@@ -90,14 +98,14 @@ def transcribe_video_task(self, project_id: str, processing_options: dict = None
             transcription_text = result["text"]
             segments = result.get("segments", [])
             
-            logger.info("Transcription completed successfully")
+            logger.info(f"✅ Transcription completed successfully - {len(segments)} segments")
         except Exception as transcription_error:
-            logger.error(f"Whisper transcription failed: {str(transcription_error)}")
+            logger.error(f"❌ Whisper transcription failed: {str(transcription_error)}")
             raise transcription_error
 
-        # 4. Save transcription to database
+        # 5. Save transcription to database
         if not segments and not transcription_text:
-            logger.warning("Whisper produced no segments or text - likely no audible speech in video")
+            logger.warning("⚠️ Whisper produced no segments or text - likely no audible speech in video")
             # Create a minimal transcription entry
             transcription_data = {
                 "project_id": project_id,
@@ -110,7 +118,7 @@ def transcribe_video_task(self, project_id: str, processing_options: dict = None
             }
             
             supabase.table("transcriptions").insert(transcription_data).execute()
-            logger.info(f"Saved empty transcription to database for project {project_id}")
+            logger.info(f"💾 Saved empty transcription to database for project {project_id}")
             
             # Update project status to completed
             supabase.table("projects").update({
@@ -119,15 +127,16 @@ def transcribe_video_task(self, project_id: str, processing_options: dict = None
             
             return
 
-        # Create ASS content for captions
+        # Create professional ASS content for captions
         ass_content = create_professional_captions(segments)
 
         if not ass_content:
-            logger.error("Failed to generate professional captions")
-            raise Exception("Caption generation failed")
+            logger.error("❌ Failed to generate professional captions")
+            # Fallback to basic SRT
+            from app.services.caption_service import segments_to_srt
+            ass_content = segments_to_srt(segments)
 
-        logger.info(f"Generated professional captions with word-by-word timing")
-        logger.info(f"Caption content length: {len(ass_content)} characters")
+        logger.info(f"📝 Generated professional captions ({len(ass_content)} characters)")
         
         # Save transcription data
         transcription_data = {
@@ -136,28 +145,41 @@ def transcribe_video_task(self, project_id: str, processing_options: dict = None
                 "text": transcription_text,
                 "segments": result["segments"],
                 "language": result.get("language", "en"),
-                "word_level_timing": True,  # Flag to indicate enhanced timing
-                "caption_style": "professional_shortform"
+                "word_level_timing": True,
+                "caption_style": "professional_shortform",
+                "processing_options": processing_options
             },
-            "srt_content": ass_content  # This is actually ASS content with professional timing
+            "srt_content": ass_content
         }
         
         supabase.table("transcriptions").insert(transcription_data).execute()
-        logger.info(f"Saved transcription to database for project {project_id}")
+        logger.info(f"💾 Saved transcription to database for project {project_id}")
 
-        # 5. Choose processing path based on options
+        # 6. Choose processing path based on intelligent editing option
         if enable_editing:
-            # Intelligent editing + captions
-            logger.info(f"Starting intelligent editing for project {project_id}")
+            logger.info(f"🤖 Starting INTELLIGENT EDITING for project {project_id}")
+            logger.info(f"🎯 Style: {processing_options.get('editing_style', 'engaging')}")
+            logger.info(f"⏱️ Target duration: {processing_options.get('target_duration', 60)}s")
+            logger.info(f"📋 Content type: {processing_options.get('content_type', 'general')}")
+            
             processed_video_path = asyncio.run(process_intelligent_editing(
                 project_id, 
                 tmp_video_file_path, 
                 segments, 
                 processing_options
             ))
+            
+            if processed_video_path:
+                logger.info(f"✅ Intelligent editing completed: {processed_video_path}")
+            else:
+                logger.warning("⚠️ Intelligent editing failed, falling back to caption overlay")
+                processed_video_path = generate_caption_overlay(
+                    project_id, 
+                    tmp_video_file_path, 
+                    ass_content
+                )
         else:
-            # Just add captions to full video
-            logger.info(f"Starting caption overlay for project {project_id}")
+            logger.info(f"📝 Starting CAPTION OVERLAY (no intelligent editing) for project {project_id}")
             processed_video_path = generate_caption_overlay(
                 project_id, 
                 tmp_video_file_path, 
@@ -165,23 +187,23 @@ def transcribe_video_task(self, project_id: str, processing_options: dict = None
             )
         
         if processed_video_path:
-            logger.info(f"Processing completed for project {project_id}")
+            logger.info(f"🎉 Processing completed for project {project_id}")
 
-        # 6. Update project status to completed
+        # 7. Update project status to completed
         supabase.table("projects").update({
             "status": "completed"
         }).eq("id", project_id).execute()
 
-        # 7. Update processing job status to completed
+        # 8. Update processing job status to completed
         supabase.table("processing_jobs").update({
             "status": "completed"
         }).eq("project_id", project_id).execute()
 
-        logger.info(f"Processing completed for project {project_id}")
+        logger.info(f"🎉 All processing completed for project {project_id}")
 
     except Exception as e:
         error_message = str(e)
-        logger.error(f"Processing failed for project {project_id}: {error_message}", exc_info=True)
+        logger.error(f"❌ Processing failed for project {project_id}: {error_message}", exc_info=True)
         
         # Update processing job status to failed
         supabase.table("processing_jobs").update({
@@ -223,6 +245,8 @@ async def process_intelligent_editing(
             'detect_faces': True
         }
         
+        logger.info(f"🎨 Creating enhanced pipeline with preferences: {editing_preferences}")
+        
         # Create enhanced pipeline
         pipeline = create_enhanced_pipeline_for_project(
             project_id=project_id,
@@ -244,16 +268,22 @@ async def process_intelligent_editing(
         context.transcription = transcription_segments
         
         # Run the pipeline
-        logger.info("Running intelligent editing pipeline...")
+        logger.info("🚀 Running intelligent editing pipeline...")
         processed_context = pipeline.run(context)
         
         # Extract highlights
         highlights = getattr(processed_context, 'highlights', [])
-        logger.info(f"Generated {len(highlights)} highlights")
+        logger.info(f"🎯 Generated {len(highlights)} highlights")
         
         if not highlights:
-            logger.warning("No highlights generated, falling back to caption overlay")
-            return generate_caption_overlay(project_id, input_video_path, segments_to_ass(transcription_segments))
+            logger.warning("⚠️ No highlights generated, falling back to caption overlay")
+            return None
+        
+        # Log highlight details
+        total_highlight_duration = sum(h.get('duration', 0) for h in highlights)
+        logger.info(f"📊 Total highlight duration: {total_highlight_duration:.1f}s")
+        for i, highlight in enumerate(highlights[:3]):  # Log first 3 highlights
+            logger.info(f"  🎬 Highlight {i+1}: {highlight.get('start', 0):.1f}s - {highlight.get('end', 0):.1f}s (score: {highlight.get('score', 0):.2f})")
         
         # Create highlight video with captions
         highlight_video_path = await create_highlight_video_with_captions(
@@ -266,9 +296,9 @@ async def process_intelligent_editing(
         return highlight_video_path
         
     except Exception as e:
-        logger.error(f"Intelligent editing failed for project {project_id}: {str(e)}")
-        logger.info("Falling back to caption overlay")
-        return generate_caption_overlay(project_id, input_video_path, segments_to_ass(transcription_segments))
+        logger.error(f"❌ Intelligent editing failed for project {project_id}: {str(e)}", exc_info=True)
+        logger.info("🔄 Falling back to caption overlay")
+        return None
 
 
 async def create_highlight_video_with_captions(
@@ -285,6 +315,8 @@ async def create_highlight_video_with_captions(
     output_video_path = None
     
     try:
+        logger.info(f"🎬 Creating highlight video with {len(highlights)} segments")
+        
         # Create segments for highlights
         highlight_segments = []
         for highlight in highlights:
@@ -299,14 +331,23 @@ async def create_highlight_video_with_captions(
             
             highlight_segments.extend(matching_segments)
         
+        logger.info(f"📝 Found {len(highlight_segments)} transcription segments for highlights")
+        
         # Create ASS content for highlights
-        ass_content = segments_to_ass(highlight_segments)
+        from app.services.enhanced_caption_service import create_professional_captions
+        ass_content = create_professional_captions(highlight_segments)
+        
+        if not ass_content:
+            logger.warning("⚠️ Failed to create professional captions, using basic ASS")
+            ass_content = segments_to_ass(highlight_segments)
         
         # Create temporary ASS file
         with tempfile.NamedTemporaryFile(mode='w', suffix='.ass', delete=False) as ass_file:
             ass_file.write(ass_content)
             ass_file.flush()
             ass_file_path = ass_file.name
+        
+        logger.info(f"📝 Created ASS file: {ass_file_path}")
         
         # Create highlight video (without captions first)
         with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as highlight_file:
@@ -319,11 +360,17 @@ async def create_highlight_video_with_captions(
             for h in highlights
         ]
         
-        extract_segments(
+        logger.info(f"✂️ Extracting {len(segments_for_extraction)} segments...")
+        result_path = extract_segments(
             input_path=input_video_path,
             segments=segments_for_extraction,
             output_path=highlight_video_path
         )
+        
+        if not result_path:
+            raise Exception("Failed to extract highlight segments")
+        
+        logger.info(f"✅ Highlight segments extracted to: {highlight_video_path}")
         
         # Add captions to highlight video
         with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as output_file:
@@ -338,38 +385,49 @@ async def create_highlight_video_with_captions(
             '-c:v', 'libx264',
             '-preset', 'medium',
             '-crf', '23',
+            '-movflags', '+faststart',  # Optimize for web playback
             '-y',
             output_video_path
         ]
         
-        subprocess.run(ffmpeg_cmd, check=True, capture_output=True)
+        logger.info("🎨 Adding captions to highlight video...")
+        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, check=True)
+        logger.info("✅ Captions added successfully")
         
         # Upload to R2
         processed_filename = f"processed_{project_id}.mp4"
         client = get_r2_client()
         
+        logger.info(f"☁️ Uploading to R2: {processed_filename}")
         upload_result = client.upload_file(
             output_video_path,
             processed_filename,
             "video/mp4"
         )
         
+        if not upload_result.get('success'):
+            raise Exception(f"Upload failed: {upload_result}")
+        
         # Update project with processed video path
         supabase.table("projects").update({
             "processed_video_path": processed_filename
         }).eq("id", project_id).execute()
         
-        logger.info(f"Highlight video with captions uploaded: {processed_filename}")
+        logger.info(f"🎉 Highlight video with captions uploaded: {processed_filename}")
         return processed_filename
         
     except Exception as e:
-        logger.error(f"Failed to create highlight video with captions: {str(e)}")
+        logger.error(f"❌ Failed to create highlight video with captions: {str(e)}", exc_info=True)
         raise
     finally:
         # Clean up temporary files
         for temp_file in [ass_file_path, highlight_video_path, output_video_path]:
             if temp_file and os.path.exists(temp_file):
-                os.unlink(temp_file)
+                try:
+                    os.unlink(temp_file)
+                    logger.debug(f"🧹 Cleaned up: {temp_file}")
+                except Exception as cleanup_error:
+                    logger.warning(f"⚠️ Failed to cleanup {temp_file}: {cleanup_error}")
 
 def run_whisper_subprocess(video_path):
     """Run whisper via subprocess to avoid memory issues."""
@@ -389,11 +447,11 @@ def run_whisper_subprocess(video_path):
             '--verbose', 'False'
         ]
         
-        logger.info(f"Running whisper command: {' '.join(cmd)}")
+        logger.info(f"🎙️ Running whisper command: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env)
         
         if result.returncode != 0:
-            logger.error(f"Whisper subprocess failed: {result.stderr}")
+            logger.error(f"❌ Whisper subprocess failed: {result.stderr}")
             raise Exception(f"Whisper failed: {result.stderr}")
         
         # Read the JSON output
@@ -405,11 +463,10 @@ def run_whisper_subprocess(video_path):
         
         with open(json_path, 'r') as f:
             json_content = f.read()
-            logger.info(f"Raw JSON content from Whisper: {json_content[:500]}...")
+            logger.debug(f"📄 Raw JSON content from Whisper: {json_content[:500]}...")
             whisper_result = json.loads(json_content)
         
-        logger.info(f"Parsed Whisper result keys: {list(whisper_result.keys())}")
-        logger.info(f"Whisper segments count: {len(whisper_result.get('segments', []))}")
+        logger.info(f"📊 Parsed Whisper result - segments: {len(whisper_result.get('segments', []))}")
         
         # Clean up the JSON file
         os.remove(json_path)
@@ -417,10 +474,10 @@ def run_whisper_subprocess(video_path):
         return whisper_result
         
     except subprocess.TimeoutExpired:
-        logger.error("Whisper subprocess timed out")
+        logger.error("⏰ Whisper subprocess timed out")
         raise Exception("Transcription timed out")
     except Exception as e:
-        logger.error(f"Whisper subprocess error: {str(e)}")
+        logger.error(f"❌ Whisper subprocess error: {str(e)}")
         raise
 
 
@@ -430,10 +487,12 @@ def generate_caption_overlay(project_id: str, input_video_path: str, ass_content
     output_video_path = None
     
     try:
+        logger.info(f"📝 Generating caption overlay for project {project_id}")
+        
         # Create temporary ASS file
         with tempfile.NamedTemporaryFile(mode='w', suffix='.ass', delete=False) as ass_file:
             ass_file.write(ass_content)
-            ass_file.flush()  # Ensure content is written
+            ass_file.flush()
             ass_file_path = ass_file.name
 
         # Verify ASS file exists and is readable
@@ -445,13 +504,18 @@ def generate_caption_overlay(project_id: str, input_video_path: str, ass_content
             if not ass_check.strip():
                 raise Exception("ASS file is empty")
         
-        logger.info(f"Created ASS file: {ass_file_path} ({len(ass_content)} chars)")
+        logger.info(f"📄 Created ASS file: {ass_file_path} ({len(ass_content)} chars)")
 
         # Create output video file
         with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as output_file:
             output_video_path = output_file.name
 
-        # FFmpeg command to overlay captions using ASS format for animations
+        # Update project status to indicate caption overlay is starting
+        supabase.table("projects").update({
+            "status": "adding_captions"
+        }).eq("id", project_id).execute()
+
+        # FFmpeg command to overlay captions using ASS format
         ffmpeg_cmd = [
             'ffmpeg',
             '-i', input_video_path,
@@ -460,16 +524,12 @@ def generate_caption_overlay(project_id: str, input_video_path: str, ass_content
             '-c:v', 'libx264',  # Use H.264 for video
             '-preset', 'medium',  # Balance between speed and quality
             '-crf', '23',  # Good quality setting
+            '-movflags', '+faststart',  # Optimize for web playback
             '-y',  # Overwrite output file
             output_video_path
         ]
 
-        logger.info(f"Running FFmpeg command: {' '.join(ffmpeg_cmd)}")
-        
-        # Update project status to indicate caption overlay is starting
-        supabase.table("projects").update({
-            "status": "adding_captions"
-        }).eq("id", project_id).execute()
+        logger.info(f"🎬 Running FFmpeg caption overlay...")
         
         # Run FFmpeg with progress monitoring
         process = subprocess.Popen(
@@ -483,21 +543,17 @@ def generate_caption_overlay(project_id: str, input_video_path: str, ass_content
         # Capture all output
         stdout, stderr = process.communicate()
         
-        logger.info(f"FFmpeg stdout: {stdout}")
-        logger.info(f"FFmpeg stderr: {stderr}")
-        
         if process.returncode != 0:
-            logger.error(f"FFmpeg failed with return code {process.returncode}")
-            logger.error(f"FFmpeg stdout: {stdout}")
+            logger.error(f"❌ FFmpeg failed with return code {process.returncode}")
             logger.error(f"FFmpeg stderr: {stderr}")
             raise Exception(f"FFmpeg processing failed: {stderr}")
         
-        logger.info("FFmpeg processing completed successfully")
+        logger.info("✅ FFmpeg caption overlay completed successfully")
 
         # Upload processed video to R2 Storage
         processed_filename = f"processed_{project_id}.mp4"
         
-        logger.info(f"Uploading processed video to R2: {processed_filename}")
+        logger.info(f"☁️ Uploading processed video to R2: {processed_filename}")
         
         client = get_r2_client()
         if client is None:
@@ -509,9 +565,9 @@ def generate_caption_overlay(project_id: str, input_video_path: str, ass_content
                 processed_filename, 
                 "video/mp4"
             )
-            logger.info(f"Processed video uploaded to R2: {upload_result}")
+            logger.info(f"✅ Processed video uploaded to R2: {upload_result}")
         except Exception as upload_error:
-            logger.error(f"Failed to upload processed video to R2: {str(upload_error)}")
+            logger.error(f"❌ Failed to upload processed video to R2: {str(upload_error)}")
             raise Exception(f"Failed to upload processed video: {str(upload_error)}")
 
         # Update project with processed video path
@@ -519,17 +575,26 @@ def generate_caption_overlay(project_id: str, input_video_path: str, ass_content
             "processed_video_path": processed_filename
         }).eq("id", project_id).execute()
 
-        logger.info(f"Processed video uploaded to R2 as {processed_filename}")
+        logger.info(f"🎉 Caption overlay completed: {processed_filename}")
         
         return processed_filename
 
     except Exception as e:
-        logger.error(f"Caption overlay failed for project {project_id}: {str(e)}")
+        logger.error(f"❌ Caption overlay failed for project {project_id}: {str(e)}")
         raise e
     
     finally:
         # Clean up temporary files
-        if 'ass_file_path' in locals() and os.path.exists(ass_file_path):
-            os.unlink(ass_file_path)
-        if 'output_video_path' in locals() and output_video_path and os.path.exists(output_video_path):
-            os.unlink(output_video_path)
+        if ass_file_path and os.path.exists(ass_file_path):
+            try:
+                os.unlink(ass_file_path)
+                logger.debug(f"🧹 Cleaned up ASS file: {ass_file_path}")
+            except Exception as cleanup_error:
+                logger.warning(f"⚠️ Failed to cleanup ASS file: {cleanup_error}")
+                
+        if output_video_path and os.path.exists(output_video_path):
+            try:
+                os.unlink(output_video_path)
+                logger.debug(f"🧹 Cleaned up output video: {output_video_path}")
+            except Exception as cleanup_error:
+                logger.warning(f"⚠️ Failed to cleanup output video: {cleanup_error}")
