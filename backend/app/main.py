@@ -38,23 +38,21 @@ app.add_middleware(
     allowed_hosts=["*"],  # In production, replace with your domain
 )
 
-# Add CORS middleware with more specific settings
+# Configure CORS for both development and production
+allowed_origins = [
+    "http://localhost:3000",
+    "http://localhost:3002",
+    "https://*.vercel.app",
+    "https://videothingy.vercel.app",  # Replace with your actual domain
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3002"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     max_age=600,  # 10 minutes
-)
-
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3002"],  # Frontend URL
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
 )
 
 # Include the API router
