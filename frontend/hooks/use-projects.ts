@@ -30,7 +30,7 @@ export const useProjects = () => {
   return useQuery<ProjectsResponse>({
     queryKey: ['projects'],
     queryFn: async () => {
-      const response = await axios.get('/api/v1/projects')
+      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/projects`)
       return response.data
     },
     refetchInterval: 5000, // Poll every 5 seconds for status updates
@@ -42,7 +42,7 @@ export const useDeleteProject = () => {
   
   return useMutation({
     mutationFn: async (projectId: string) => {
-      await axios.delete(`/api/v1/projects/${projectId}`)
+      await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/projects/${projectId}`)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
@@ -67,7 +67,7 @@ export const useUploadProject = () => {
       formData.append('file', file)
       formData.append('project_name', projectName)
 
-      const response = await axios.post('/api/v1/upload', formData, {
+      const response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/upload`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -80,7 +80,7 @@ export const useUploadProject = () => {
       })
 
       // Start transcription automatically
-      await axios.post('/api/v1/transcribe', {
+      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/transcribe`, {
         project_id: response.data.project_id
       })
 
@@ -108,7 +108,7 @@ export const useReprocessProject = () => {
         contentType: 'general' | 'tutorial' | 'interview' | 'presentation' | 'vlog'
       }
     }) => {
-      const response = await axios.post(`/api/v1/projects/${projectId}/process`, processingOptions)
+      const response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/projects/${projectId}/process`, processingOptions)
       return response.data
     },
     onSuccess: () => {

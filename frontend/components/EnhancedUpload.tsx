@@ -64,14 +64,9 @@ export default function EnhancedUpload() {
       await uploadFile(file, projectName, {
         chunkSize: 5 * 1024 * 1024, // 5MB chunks
         processingOptions: {
-          // Send both formats to ensure backend compatibility
-          enable_intelligent_editing: processingOptions.enableIntelligentEditing,
           enableIntelligentEditing: processingOptions.enableIntelligentEditing,
-          editing_style: processingOptions.editingStyle,
           editingStyle: processingOptions.editingStyle,
-          target_duration: processingOptions.targetDuration,
           targetDuration: processingOptions.targetDuration,
-          content_type: processingOptions.contentType,
           contentType: processingOptions.contentType
         },
         onProgress: (progress) => {

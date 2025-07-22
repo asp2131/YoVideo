@@ -5,7 +5,7 @@ import { Upload, FileVideo, Download, Trash2, Play, Clock, CheckCircle, AlertCir
 import axios from 'axios'
 import { useProjects, useDeleteProject, useUploadProject, type Project } from '../hooks/use-projects'
 import { useUploadStore } from '../store/upload-store'
-import EnhancedUpload from '@/components/Enhancedupload'
+import EnhancedUpload from '@/components/EnhancedUpload'
 
 export default function Home() {
   const { data: projectsData, isLoading: loading, error } = useProjects()

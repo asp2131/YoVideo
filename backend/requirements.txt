@@ -12,6 +12,9 @@ redis==5.0.1
 # Supabase
 supabase==2.0.2
 
+# AWS/R2 Storage
+boto3>=1.26.0
+
 # Video & AI Processing
 whisper
 ffmpeg-python==0.2.0
