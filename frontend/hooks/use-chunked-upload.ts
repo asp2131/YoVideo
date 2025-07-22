@@ -57,7 +57,7 @@ export const useChunkedUpload = () => {
       const uploadId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       
       // Initialize multipart upload with processing options
-      const initResponse = await fetch('/api/v1/upload/init', {
+      const initResponse = await fetch(`  ${process.env.NEXT_PUBLIC_API_URL}/api/v1/upload/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -103,7 +103,7 @@ export const useChunkedUpload = () => {
               projectId
             } as ChunkMetadata))
 
-            const chunkResponse = await fetch('/api/v1/upload/chunk', {
+            const chunkResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/upload/chunk`, {
               method: 'POST',
               body: formData
             })
@@ -135,7 +135,7 @@ export const useChunkedUpload = () => {
       }
 
       // Complete multipart upload
-      const completeResponse = await fetch('/api/v1/upload/complete', {
+      const completeResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/upload/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -153,7 +153,7 @@ export const useChunkedUpload = () => {
       const result = await completeResponse.json()
       
       // Start transcription with processing options
-      const transcribeResponse = await fetch('/api/v1/transcribe', {
+      const transcribeResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/transcribe`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
